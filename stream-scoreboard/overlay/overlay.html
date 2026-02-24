@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Scoreboard Overlay</title>
+    <link rel="stylesheet" href="overlay.css">
+</head>
+<body>
+<div id="standby-screen">
+    <img id="standby-image" alt="Standby Advertisement" />
+    <video id="standby-video" autoplay muted playsinline></video>
+    <div id="standby-dvd"></div>
+    <div id="standby-message">Standby</div>
+    <div id="standby-submessage"></div>
+</div>
+
+<div id="scoreboard-screen">
+    <canvas id="winner-fireworks"></canvas>
+    <div id="winner-confetti"></div>
+    <div id="overlay-header">
+        <img id="sponsor-1" alt="Sponsor Left 1" />
+        <img id="sponsor-2" alt="Sponsor Left 2" />
+        <div id="event-title">TITLE NAME EVENT</div>
+        <img id="sponsor-3" alt="Sponsor Right 1" />
+        <img id="sponsor-4" alt="Sponsor Right 2" />
+    </div>
+    <div id="timer">00:00</div>
+
+    <!-- This is the container overlay.js fills -->
+    <div id="teams-container"></div>
+
+    <!-- Optional round display -->
+    <div id="round">ROUND 1</div>
+
+    <div id="hold-indicator" style="display:none;">HOLD</div>
+</div>
+
+
+<script src="overlay.js" defer></script>
+</body>
+</html>

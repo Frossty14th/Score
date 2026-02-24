@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Stream Scoreboard Control</title>
+    <link rel="stylesheet" href="control.css">
+</head>
+<body>
+
+<div class="topbar">
+    <h1>Scoreboard Control</h1>
+    <div class="topbar-tools">
+        <button id="menu-btn" data-lock-exempt onclick="toggleTopMenu()" title="Open quick tools menu">Menu</button>
+        <div id="top-menu" class="top-menu">
+            <button class="menu-item" data-lock-exempt onclick="openOperatorLog()">Operator Activity Log</button>
+            <button class="menu-item" data-lock-exempt onclick="openHotkeySettings()">Hotkey Settings</button>
+            <button class="menu-item danger" data-lock-exempt onclick="resetMatch()">Reset Match</button>
+        </div>
+    </div>
+    <section class="panel panel-mode">
+        <div class="panel-head">
+            <h3>Mode Controls</h3>
+            <div id="mode-datetime" aria-live="polite">
+                <span id="mode-date"></span>
+                <span id="mode-time"></span>
+            </div>
+        </div>
+        <div class="panel-row">
+            <button id="live-btn" onclick="toggleLive()" title="Toggle live scoreboard visibility">Live: OFF</button>
+            <button id="hold-btn" onclick="toggleHold()" title="Show/Hide hold overlay">Hold: OFF</button>
+            <button id="standby-btn" onclick="toggleStandby()" title="Switch to standby mode">Standby: ON</button>
+            <button onclick="editRoundName()" title="Rename current round">Edit Round</button>
+            <button id="undo-btn" onclick="undoAction()" title="Undo last change (Ctrl+Z)">Undo</button>
+            <button id="redo-btn" onclick="redoAction()" title="Redo last undone change (Ctrl+Y)">Redo</button>
+            <span id="history-meta">History: 0 undo / 0 redo</span>
+        </div>
+        <div class="view-buttons">
+            <button class="view-btn active" id="btn-all" onclick="changeViewMode('all')">ALL</button>
+            <button class="view-btn" id="btn-top10" onclick="changeViewMode('top10')">TOP 10</button>
+            <button class="view-btn" id="btn-top5" onclick="changeViewMode('top5')">TOP 5</button>
+            <button class="view-btn" id="btn-top3" onclick="changeViewMode('top3')">TOP 3</button>
+            <button class="view-btn" id="btn-spotlight" onclick="changeViewMode('spotlight')">SPOTLIGHT</button>
+            <button class="view-btn" id="btn-final" onclick="changeViewMode('final')">FINAL</button>
+        </div>
+        <div class="panel-row">
+            <button id="winner-btn" onclick="triggerWinnerCelebration()" title="Show winner confetti and fireworks on overlay">Winner</button>
+        </div>
+        <div class="sfx-strip">
+            <div class="sfx-head">
+                <strong>Soundboard</strong>
+                <div class="sfx-add">
+                    <input type="text" id="sfx-name-input" placeholder="New effect name..." maxlength="24">
+                    <button onclick="addSfxSlot()">Add SFX</button>
+                </div>
+            </div>
+            <div id="sfx-list" class="sfx-list"></div>
+            <div class="sfx-stop-wrap">
+                <button id="sfx-stop-btn" onclick="stopSfx()">Stop SFX</button>
+            </div>
+        </div>
+        <div class="panel-row event-title-row">
+            <label for="event-title-input">Event Title</label>
+            <input type="text" id="event-title-input" placeholder="Type event title..." style="width:260px;">
+            <button onclick="applyEventTitle()">Apply Title</button>
+        </div>
+        <div class="sponsor-slot-grid">
+            <div class="sponsor-slot">
+                <span>Logo Left 1</span>
+                <button onclick="uploadSponsorLogo('1')">Upload</button>
+                <button onclick="clearSponsorLogo('1')">Clear</button>
+            </div>
+            <div class="sponsor-slot">
+                <span>Logo Left 2</span>
+                <button onclick="uploadSponsorLogo('2')">Upload</button>
+                <button onclick="clearSponsorLogo('2')">Clear</button>
+            </div>
+            <div class="sponsor-slot">
+                <span>Logo Right 1</span>
+                <button onclick="uploadSponsorLogo('3')">Upload</button>
+                <button onclick="clearSponsorLogo('3')">Clear</button>
+            </div>
+            <div class="sponsor-slot">
+                <span>Logo Right 2</span>
+                <button onclick="uploadSponsorLogo('4')">Upload</button>
+                <button onclick="clearSponsorLogo('4')">Clear</button>
+            </div>
+        </div>
+    </section>
+</div>
+
+<div class="control-grid">
+    <section class="panel panel-teams">
+        <h3>Team List</h3>
+        <div class="panel-row">
+            <input type="text" id="team-search" placeholder="Search team name..." style="width:250px;">
+            <button onclick="clearTeamSearch()">Clear Search</button>
+            <button onclick="addTeam()">Add Team</button>
+        </div>
+        <div id="teams-container"></div>
+    </section>
+
+    <section class="panel panel-timer">
+        <h3>Timer</h3>
+        <div class="timer-meta">
+            <span id="timer-status" class="timer-status paused">Paused</span>
+            <span id="timer-base">Base: 05:00</span>
+        </div>
+        <div id="timer">00:00</div>
+        <div class="panel-row timer-actions">
+            <button onclick="startTimer()" title="Start countdown timer">Start</button>
+            <button onclick="pauseTimer()" title="Pause countdown timer">Pause</button>
+            <button onclick="resetTimer()" title="Reset timer to base value">Reset</button>
+            <button onclick="setTimer()">Set Time (Prompt)</button>
+        </div>
+        <div class="panel-row timer-setup">
+            <label>Set Min</label>
+            <input type="number" id="timer-minutes-input" min="0" max="999" value="5" style="width:70px;">
+            <label>Set Sec</label>
+            <input type="number" id="timer-seconds-input" min="0" max="59" value="0" style="width:70px;">
+            <button onclick="applyTimerFromInputs()">Set Timer</button>
+            <button onclick="resetTimer()">Reset To Base</button>
+        </div>
+        <div class="panel-row timer-presets">
+            <label>Presets</label>
+            <button onclick="setTimerPreset(60)">1:00</button>
+            <button onclick="setTimerPreset(180)">3:00</button>
+            <button onclick="setTimerPreset(300)">5:00</button>
+            <button onclick="setTimerPreset(600)">10:00</button>
+        </div>
+        <div class="panel-row timer-adjust">
+            <label>Adjust</label>
+            <button onclick="addSeconds(5)">+5 sec</button>
+            <button onclick="addSeconds(10)">+10 sec</button>
+            <button onclick="addSeconds(20)">+20 sec</button>
+            <input type="number" id="timer-adjust-input" value="15" style="width:70px;">
+            <button onclick="applyTimerAdjust(1)">+Custom</button>
+            <button onclick="applyTimerAdjust(-1)">-Custom</button>
+        </div>
+        <div class="panel-row timer-lock-row">
+            <button id="lock-btn" onclick="toggleControlLock()" title="Lock all controls except unlock">Lock: OFF</button>
+        </div>
+    </section>
+
+    <section class="panel panel-ad">
+        <h3>Advertisement</h3>
+        <div class="panel-row">
+            <button onclick="uploadStandbyMedia()">Upload Single Media</button>
+            <button onclick="showPreviewOnOverlay()">Show On Overlay</button>
+            <button onclick="togglePreviewPlayback()">Preview Play/Pause</button>
+            <button onclick="clearStandbyMedia()">Clear Standby Media</button>
+        </div>
+        <div id="ad-status">Ad media: none</div>
+        <div class="ad-preview">
+            <div class="ad-preview-title">Ad Preview (Control Only)</div>
+            <img id="ad-preview-image" alt="Ad preview image" />
+            <video id="ad-preview-video" muted loop playsinline></video>
+            <div class="ad-preview-controls" id="ad-preview-controls">
+                <button type="button" onclick="previewPlayPause()">Play/Pause</button>
+                <button type="button" onclick="previewStop()">Stop</button>
+                <button type="button" onclick="previewSeek(-5)">-5s</button>
+                <button type="button" onclick="previewSeek(5)">+5s</button>
+            </div>
+            <div class="ad-preview-timeline" id="ad-preview-timeline-wrap">
+                <span id="ad-preview-time">00:00 / 00:00</span>
+                <input type="range" id="ad-preview-seek" min="0" max="1000" value="0" step="1">
+            </div>
+            <div id="ad-preview-name">No media selected</div>
+        </div>
+        <div class="panel-row">
+            <label>Fallback</label>
+            <select id="fallback-mode">
+                <option value="message">Message</option>
+                <option value="dvd">DVD</option>
+            </select>
+            <input type="text" id="fallback-title" placeholder="Fallback title" style="width:180px;">
+            <input type="text" id="fallback-subtitle" placeholder="Fallback subtitle" style="width:180px;">
+            <button onclick="uploadFallbackDvdImage()">Upload DVD Image</button>
+            <button onclick="clearFallbackDvdImage()">Clear DVD Image</button>
+            <button onclick="testFallbackSnow()">Test Snow</button>
+            <button onclick="applyFallbackSettings()">Apply Fallback</button>
+        </div>
+    </section>
+</div>
+
+<section class="panel panel-hotkeys panel-hotkeys-side" id="shortcut-dock">
+    <div class="dock-head">
+        <h3>Shortcuts</h3>
+        <button id="dock-toggle-btn" data-lock-exempt onclick="toggleShortcutDock()" title="Collapse/Expand shortcuts panel">Collapse</button>
+    </div>
+    <div id="status-strip" aria-live="polite">
+        <span class="status-chip" id="status-overlay">Overlay: Checking</span>
+        <span class="status-chip" id="status-live">Live: OFF</span>
+        <span class="status-chip" id="status-standby">Standby: ON</span>
+        <span class="status-chip" id="status-lock">Lock: OFF</span>
+        <span class="status-chip" id="status-timer">Timer: Paused</span>
+    </div>
+    <div id="hotkey-list-dock-wrap">
+        <div id="hotkey-list-dock"></div>
+    </div>
+</section>
+
+<!-- Hidden file input for logos -->
+<input type="file" id="logo-upload" accept="image/*" style="display:none;">
+<input type="file" id="standby-upload" accept="image/*,video/*" style="display:none;">
+<input type="file" id="advertisement-folder-input" accept="image/*,video/*" webkitdirectory directory multiple style="display:none;">
+<input type="file" id="fallback-dvd-upload" accept="image/*" style="display:none;">
+<input type="file" id="sponsor-1-upload" accept="image/*" style="display:none;">
+<input type="file" id="sponsor-2-upload" accept="image/*" style="display:none;">
+<input type="file" id="sponsor-3-upload" accept="image/*" style="display:none;">
+<input type="file" id="sponsor-4-upload" accept="image/*" style="display:none;">
+<input type="file" id="sfx-upload-input" accept="audio/*" style="display:none;">
+
+<!-- Logo resize panel -->
+<div id="logo-resize-panel">
+    <h3>Adjust Logo Size</h3>
+    <img id="logo-preview" src="" alt="Logo Preview" style="display:block; margin:10px auto; border:1px solid #ccc;">
+    
+    <label>
+        <input type="checkbox" id="logo-fit-box" checked>
+        Fit to Box
+    </label><br><br>
+
+    <label>Logo Size:</label>
+    <input type="range" id="logo-size-slider" min="20" max="150" value="50">
+    <input type="number" id="logo-size-input" min="20" max="150" value="50" style="width:70px;">
+    <span id="logo-size-value">50</span>px<br><br>
+
+    <button id="logo-resize-ok">OK</button>
+    <button id="logo-resize-cancel">Cancel</button>
+</div>
+
+<div id="toast-stack" aria-live="polite" aria-atomic="true"></div>
+
+<div id="operator-log-modal" class="modal-backdrop" style="display:none;">
+    <div class="modal-card">
+        <div class="modal-head">
+            <h3>Operator Activity Log</h3>
+            <div class="modal-actions">
+                <button data-lock-exempt onclick="clearOperatorLog()">Clear Log</button>
+                <button data-lock-exempt onclick="closeOperatorLog()">Close</button>
+            </div>
+        </div>
+        <div class="modal-body">
+            <table class="log-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Action</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody id="operator-log-body"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="hotkey-modal" class="modal-backdrop" style="display:none;">
+    <div class="modal-card hotkey-modal-card">
+        <div class="modal-head">
+            <h3>Hotkey Settings</h3>
+            <div class="modal-actions">
+                <button data-lock-exempt onclick="closeHotkeySettings()">Close</button>
+            </div>
+        </div>
+        <div class="modal-body">
+            <div class="panel-row">
+                <select id="hotkey-action-select"></select>
+                <input type="text" id="hotkey-record-input" readonly placeholder="No shortcut" style="width:180px;">
+                <button id="hotkey-record-btn" onclick="toggleHotkeyRecording()">Record</button>
+                <button onclick="saveHotkeyBinding()">Save</button>
+                <button onclick="clearHotkeyBinding()">Clear</button>
+                <button onclick="resetHotkeyBindings()">Reset Defaults</button>
+            </div>
+            <div id="hotkey-hint">Press Record, then press your shortcut.</div>
+            <div id="hotkey-list"></div>
+        </div>
+    </div>
+</div>
+
+
+<script src="control.js" defer></script>
+</body>
+</html>
