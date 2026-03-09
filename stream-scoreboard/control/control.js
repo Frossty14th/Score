@@ -150,8 +150,8 @@ const ADVERTISEMENT_FOLDER_URL = "../Advertisement/";
 const ADVERTISEMENT_MANIFEST_URL = "../Advertisement/advertisement-manifest.json";
 
 const DEFAULT_TEAMS = [
-    { name: "Team A", score: 0, logo: "", logoWidth: 150, logoHeight: null },
-    { name: "Team B", score: 0, logo: "", logoWidth: 150, logoHeight: null }
+    { name: "Team A", score: 0, logo: "", logoWidth: 150, logoHeight: null, teamColor: "" },
+    { name: "Team B", score: 0, logo: "", logoWidth: 150, logoHeight: null, teamColor: "" }
 ];
 const VALID_VIEWS = new Set(["all", "top10", "top5", "top3", "spotlight", "final"]);
 const HOTKEY_ACTIONS = [
@@ -210,6 +210,7 @@ let sponsorLogos = {
 let liveMode = false;
 let holdMode = false;
 let viewMode = "all";
+let allViewScroll = 0;
 let standbyMode = true;
 let standbyMediaSrc = "";
 let standbyMediaType = "";
@@ -246,7 +247,11 @@ let winnerFxActive = false;
 let sfxClips = { ...DEFAULT_SFX_CLIPS };
 let activeSfxKey = "";
 let activeSfxAudio = null;
+let sfxPaused = false;
 let sfxUploadTargetKey = "";
+let sfxClipDurations = {};
+const sfxDurationLoadingKeys = new Set();
+let addTeamLogoData = "";
 
 function playButtonClickSound() {
     try {
@@ -292,13 +297,20 @@ function clampNumber(value, fallback) {
     return num;
 }
 
+function sanitizeHexColor(value, fallback = "") {
+    const raw = String(value || "").trim();
+    if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw.toLowerCase();
+    return fallback;
+}
+
 function sanitizeTeam(team, fallbackName) {
     const safeName = typeof team?.name === "string" && team.name.trim() ? team.name.trim() : fallbackName;
     const score = Math.max(0, Math.floor(clampNumber(team?.score, 0)));
     const logo = typeof team?.logo === "string" ? team.logo : "";
-    const logoWidth = TEAM_LOGO_FIXED_SIZE;
+    const logoWidth = Math.max(60, Math.min(240, Math.floor(clampNumber(team?.logoWidth, TEAM_LOGO_FIXED_SIZE))));
     const logoHeight = null;
-    return { name: safeName, score, logo, logoWidth, logoHeight };
+    const teamColor = sanitizeHexColor(team?.teamColor, "");
+    return { name: safeName, score, logo, logoWidth, logoHeight, teamColor };
 }
 
 function sanitizeHotkeyBindings(rawBindings) {
@@ -382,6 +394,7 @@ function createHistorySnapshot() {
         liveMode,
         holdMode,
         viewMode,
+        allViewScroll,
         standbyMode,
         standbyMediaSrc,
         standbyMediaType,
@@ -443,6 +456,7 @@ function restoreHistorySnapshot(snapshot) {
     liveMode = Boolean(snapshot.liveMode);
     holdMode = Boolean(snapshot.holdMode);
     viewMode = VALID_VIEWS.has(snapshot.viewMode) ? snapshot.viewMode : "all";
+    allViewScroll = Math.max(0, Math.min(1000, Math.floor(clampNumber(snapshot.allViewScroll, 0))));
     standbyMode = Boolean(snapshot.standbyMode);
     standbyMediaSrc = typeof snapshot.standbyMediaSrc === "string" ? snapshot.standbyMediaSrc : "";
     standbyMediaType = snapshot.standbyMediaType === "video" ? "video" : (snapshot.standbyMediaType === "image" ? "image" : "");
@@ -509,6 +523,7 @@ function getStatePayload() {
         liveMode,
         holdMode,
         viewMode,
+        allViewScroll,
         standbyMode,
         standbyMediaSrc,
         standbyMediaType,
@@ -552,6 +567,7 @@ function loadState() {
         liveMode = Boolean(parsed.liveMode);
         holdMode = Boolean(parsed.holdMode);
         viewMode = VALID_VIEWS.has(parsed.viewMode) ? parsed.viewMode : "all";
+        allViewScroll = Math.max(0, Math.min(1000, Math.floor(clampNumber(parsed.allViewScroll, 0))));
         standbyMode = parsed.standbyMode === undefined ? true : Boolean(parsed.standbyMode);
         standbyMediaSrc = typeof parsed.standbyMediaSrc === "string" ? parsed.standbyMediaSrc : "";
         standbyMediaType = parsed.standbyMediaType === "video" ? "video" : (parsed.standbyMediaType === "image" ? "image" : "");
@@ -769,6 +785,7 @@ function resetMatch() {
     liveMode = false;
     standbyMode = true;
     viewMode = "all";
+    allViewScroll = 0;
     adHold = false;
     adCurrentIndex = 0;
     adSeekToken += 1;
@@ -777,6 +794,7 @@ function resetMatch() {
     updateTimerDisplay();
     syncTimerInputsFromState();
     syncButtonStates();
+    updateAllTeamsScrollControls();
     saveState();
     broadcastControlState();
     updateAdStatus();
@@ -797,6 +815,163 @@ function closeHotkeySettings() {
     const modal = document.getElementById("hotkey-modal");
     if (!modal) return;
     modal.style.display = "none";
+}
+
+function openAddTeamModal() {
+    const modal = document.getElementById("add-team-modal");
+    if (!modal) return;
+
+    const nameInput = document.getElementById("add-team-name");
+    const scoreInput = document.getElementById("add-team-score");
+    const widthRange = document.getElementById("add-team-logo-width");
+    const widthNumber = document.getElementById("add-team-logo-width-num");
+    const colorInput = document.getElementById("add-team-color");
+    const colorText = document.getElementById("add-team-color-text");
+    const logoInput = document.getElementById("add-team-logo-file");
+    const logoPreview = document.getElementById("add-team-logo-preview");
+
+    addTeamLogoData = "";
+    if (nameInput) nameInput.value = "";
+    if (scoreInput) scoreInput.value = "0";
+    if (widthRange) widthRange.value = String(TEAM_LOGO_FIXED_SIZE);
+    if (widthNumber) widthNumber.value = String(TEAM_LOGO_FIXED_SIZE);
+    if (colorInput) colorInput.value = "#44d07c";
+    if (colorText) colorText.value = "#44d07c";
+    if (logoInput) logoInput.value = "";
+    if (logoPreview) {
+        logoPreview.removeAttribute("src");
+        logoPreview.style.display = "none";
+    }
+
+    modal.style.display = "flex";
+    if (nameInput) {
+        setTimeout(() => {
+            nameInput.focus();
+        }, 0);
+    }
+}
+
+function closeAddTeamModal() {
+    const modal = document.getElementById("add-team-modal");
+    if (!modal) return;
+    modal.style.display = "none";
+}
+
+function handleAddTeamLogoFile(event) {
+    const input = event?.target;
+    const file = input?.files?.[0];
+    const preview = document.getElementById("add-team-logo-preview");
+    if (!file) {
+        addTeamLogoData = "";
+        if (preview) {
+            preview.removeAttribute("src");
+            preview.style.display = "none";
+        }
+        return;
+    }
+
+    const name = String(file.name || "").toLowerCase();
+    const type = String(file.type || "").toLowerCase();
+    const isAllowedType = ["image/png", "image/jpeg", "image/gif"].includes(type)
+        || /\.(png|jpe?g|gif)$/i.test(name);
+    if (!isAllowedType) {
+        showToast("Logo must be PNG, JPG, or GIF", "warn");
+        addTeamLogoData = "";
+        if (input) input.value = "";
+        if (preview) {
+            preview.removeAttribute("src");
+            preview.style.display = "none";
+        }
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        addTeamLogoData = typeof ev.target?.result === "string" ? ev.target.result : "";
+        if (preview && addTeamLogoData) {
+            preview.src = addTeamLogoData;
+            preview.style.display = "block";
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+function initAddTeamModal() {
+    const widthRange = document.getElementById("add-team-logo-width");
+    const widthNumber = document.getElementById("add-team-logo-width-num");
+    const colorInput = document.getElementById("add-team-color");
+    const colorText = document.getElementById("add-team-color-text");
+    const logoInput = document.getElementById("add-team-logo-file");
+    const nameInput = document.getElementById("add-team-name");
+
+    if (widthRange && widthNumber) {
+        widthRange.addEventListener("input", () => {
+            widthNumber.value = widthRange.value;
+        });
+        widthNumber.addEventListener("input", () => {
+            const safe = Math.max(60, Math.min(240, Math.floor(Number(widthNumber.value) || TEAM_LOGO_FIXED_SIZE)));
+            widthNumber.value = String(safe);
+            widthRange.value = String(safe);
+        });
+    }
+
+    if (colorInput && colorText) {
+        colorInput.addEventListener("input", () => {
+            colorText.value = colorInput.value;
+        });
+        colorText.addEventListener("change", () => {
+            const safe = sanitizeHexColor(colorText.value, colorInput.value);
+            colorInput.value = safe;
+            colorText.value = safe;
+        });
+    }
+
+    if (logoInput) {
+        logoInput.addEventListener("change", handleAddTeamLogoFile);
+    }
+
+    if (nameInput) {
+        nameInput.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                createTeamFromModal();
+            }
+        });
+    }
+}
+
+function createTeamFromModal() {
+    const nameInput = document.getElementById("add-team-name");
+    const scoreInput = document.getElementById("add-team-score");
+    const widthInput = document.getElementById("add-team-logo-width-num");
+    const colorText = document.getElementById("add-team-color-text");
+
+    const name = String(nameInput?.value || "").trim();
+    if (!name) {
+        showToast("Team name is required", "warn");
+        if (nameInput) nameInput.focus();
+        return;
+    }
+
+    const score = Math.max(0, Math.floor(Number(scoreInput?.value) || 0));
+    const logoWidth = Math.max(60, Math.min(240, Math.floor(Number(widthInput?.value) || TEAM_LOGO_FIXED_SIZE)));
+    const teamColor = sanitizeHexColor(colorText?.value, "#44d07c");
+
+    recordHistory();
+    teams.push({
+        name,
+        score,
+        logo: addTeamLogoData || "",
+        logoWidth,
+        logoHeight: null,
+        teamColor
+    });
+    renderTeams();
+    saveState();
+    broadcastUpdate();
+    addOperatorLog("Team Added", name);
+    showToast(`${name} added`, "ok");
+    closeAddTeamModal();
 }
 
 function clearOperatorLog() {
@@ -825,6 +1000,10 @@ function initTopMenu() {
         if (hotkeyBackdrop && target.id === "hotkey-modal") {
             closeHotkeySettings();
         }
+        const addTeamBackdrop = target.closest("#add-team-modal");
+        if (addTeamBackdrop && target.id === "add-team-modal") {
+            closeAddTeamModal();
+        }
     });
 
     document.addEventListener("keydown", (event) => {
@@ -832,6 +1011,7 @@ function initTopMenu() {
             closeTopMenu();
             closeOperatorLog();
             closeHotkeySettings();
+            closeAddTeamModal();
         }
     });
 }
@@ -852,6 +1032,7 @@ function syncButtonStates() {
     document.querySelectorAll(".view-btn").forEach((btn) => btn.classList.remove("active"));
     const activeViewButton = document.getElementById(`btn-${viewMode}`);
     if (activeViewButton) activeViewButton.classList.add("active");
+    updateAllTeamsScrollControls();
     updateStatusStrip();
 }
 
@@ -860,6 +1041,46 @@ function syncEventHeaderControls() {
     if (titleInput) {
         titleInput.value = eventTitle || "";
     }
+}
+
+function updateAllTeamsScrollControls() {
+    const range = document.getElementById("all-scroll-range");
+    const value = document.getElementById("all-scroll-value");
+    const resetBtn = document.getElementById("all-scroll-reset-btn");
+    const row = document.querySelector(".all-scroll-row");
+    const safe = Math.max(0, Math.min(1000, Math.floor(Number(allViewScroll) || 0)));
+    const enabled = viewMode === "all";
+
+    if (range) {
+        range.value = String(safe);
+        range.disabled = !enabled || controlLockMode;
+    }
+    if (value) {
+        value.textContent = `${Math.round((safe / 1000) * 100)}%`;
+    }
+    if (resetBtn) {
+        resetBtn.disabled = !enabled || controlLockMode;
+    }
+    if (row) {
+        row.style.opacity = enabled ? "1" : "0.6";
+    }
+}
+
+function setAllTeamsScroll(rawValue) {
+    const safe = Math.max(0, Math.min(1000, Math.floor(Number(rawValue) || 0)));
+    if (safe === allViewScroll) {
+        updateAllTeamsScrollControls();
+        return;
+    }
+    allViewScroll = safe;
+    updateAllTeamsScrollControls();
+    saveState();
+    broadcastControlState();
+    if (liveMode) broadcastUpdate();
+}
+
+function resetAllTeamsScroll() {
+    setAllTeamsScroll(0);
 }
 
 function applyControlLockState() {
@@ -903,12 +1124,102 @@ function normalizeSfxKey(value) {
     return normalized;
 }
 
+function formatSfxDuration(seconds) {
+    const totalSeconds = Math.max(0, Math.floor(Number(seconds) || 0));
+    const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
+    const remainSeconds = (totalSeconds % 60).toString().padStart(2, "0");
+    return `${minutes}:${remainSeconds}`;
+}
+
+function formatSfxTimePair(currentSeconds, totalSeconds) {
+    const hasTotal = Number.isFinite(totalSeconds) && totalSeconds > 0;
+    const current = formatSfxDuration(currentSeconds);
+    const total = hasTotal ? formatSfxDuration(totalSeconds) : "--:--";
+    return `${current} / ${total}`;
+}
+
+function getSfxDurationText(key) {
+    const duration = sfxClipDurations[key];
+    if (Number.isFinite(duration) && duration > 0) {
+        return `Duration: ${formatSfxDuration(duration)}`;
+    }
+    return "Duration: --:--";
+}
+
+function getSfxProgressValue(key) {
+    if (!activeSfxAudio || activeSfxKey !== key) return 0;
+    const duration = Number(activeSfxAudio.duration);
+    if (!Number.isFinite(duration) || duration <= 0) return 0;
+    return Math.round((Math.max(0, activeSfxAudio.currentTime) / duration) * 1000);
+}
+
+function getSfxProgressText(key) {
+    const clipDuration = Number(sfxClipDurations[key]);
+    if (!activeSfxAudio || activeSfxKey !== key) {
+        return formatSfxTimePair(0, clipDuration);
+    }
+    const current = Number(activeSfxAudio.currentTime);
+    const duration = Number(activeSfxAudio.duration);
+    return formatSfxTimePair(current, duration || clipDuration);
+}
+
+function updateActiveSfxProgressUI() {
+    if (!activeSfxKey || !activeSfxAudio) return;
+    const slot = document.querySelector(`.sfx-slot[data-sfx-key="${activeSfxKey}"]`);
+    if (!slot) return;
+
+    const timeEl = slot.querySelector(".sfx-progress-time");
+    const rangeEl = slot.querySelector(".sfx-progress-range");
+    if (timeEl) timeEl.textContent = getSfxProgressText(activeSfxKey);
+    if (rangeEl) rangeEl.value = String(getSfxProgressValue(activeSfxKey));
+}
+
+function seekSfxToValue(key, sliderValue) {
+    if (!key || !Object.prototype.hasOwnProperty.call(sfxClips, key)) return;
+    if (!activeSfxAudio || activeSfxKey !== key) return;
+
+    const duration = Number(activeSfxAudio.duration);
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    const normalized = Math.max(0, Math.min(1000, Math.floor(Number(sliderValue) || 0)));
+    activeSfxAudio.currentTime = (normalized / 1000) * duration;
+    updateActiveSfxProgressUI();
+}
+
+function loadSfxDuration(key, src) {
+    if (!key || !src || sfxDurationLoadingKeys.has(key)) return;
+    sfxDurationLoadingKeys.add(key);
+
+    const probe = new Audio();
+    probe.preload = "metadata";
+    probe.src = src;
+
+    const clearLoading = () => {
+        sfxDurationLoadingKeys.delete(key);
+    };
+
+    probe.addEventListener("loadedmetadata", () => {
+        const duration = Number(probe.duration);
+        sfxClipDurations[key] = Number.isFinite(duration) ? duration : 0;
+        clearLoading();
+        renderSfxButtonsState();
+    }, { once: true });
+
+    probe.addEventListener("error", () => {
+        sfxClipDurations[key] = 0;
+        clearLoading();
+        renderSfxButtonsState();
+    }, { once: true });
+}
+
 function ensureSfxAudio() {
     if (activeSfxAudio) return activeSfxAudio;
     activeSfxAudio = new Audio();
     activeSfxAudio.preload = "auto";
+    activeSfxAudio.addEventListener("timeupdate", updateActiveSfxProgressUI);
+    activeSfxAudio.addEventListener("loadedmetadata", updateActiveSfxProgressUI);
     activeSfxAudio.addEventListener("ended", () => {
         activeSfxKey = "";
+        sfxPaused = false;
         renderSfxButtonsState();
     });
     return activeSfxAudio;
@@ -928,20 +1239,62 @@ function renderSfxButtonsState() {
             keys.forEach((key) => {
                 const slot = document.createElement("div");
                 slot.className = "sfx-slot";
+                slot.dataset.sfxKey = key;
+                if (activeSfxKey === key) slot.classList.add("is-active");
 
                 const title = document.createElement("strong");
                 title.textContent = getSfxLabel(key);
                 slot.appendChild(title);
 
+                const hasClip = Boolean(sfxClips[key]);
+                if (hasClip && !Object.prototype.hasOwnProperty.call(sfxClipDurations, key)) {
+                    loadSfxDuration(key, sfxClips[key]);
+                }
+
+                const duration = document.createElement("span");
+                duration.className = "sfx-duration";
+                duration.textContent = getSfxDurationText(key);
+                slot.appendChild(duration);
+
+                const progressWrap = document.createElement("div");
+                progressWrap.className = "sfx-progress";
+
+                const progressTime = document.createElement("span");
+                progressTime.className = "sfx-progress-time";
+                progressTime.textContent = getSfxProgressText(key);
+                progressWrap.appendChild(progressTime);
+
+                const progress = document.createElement("input");
+                progress.type = "range";
+                progress.min = "0";
+                progress.max = "1000";
+                progress.step = "1";
+                progress.value = String(getSfxProgressValue(key));
+                progress.className = "sfx-progress-range";
+                progress.disabled = controlLockMode || !hasClip || activeSfxKey !== key;
+                progress.addEventListener("input", () => seekSfxToValue(key, progress.value));
+                progressWrap.appendChild(progress);
+
+                slot.appendChild(progressWrap);
+
                 const actions = document.createElement("div");
                 actions.className = "sfx-actions";
 
+                const isActive = activeSfxKey === key;
+                const isPlaying = Boolean(isActive && activeSfxAudio && !activeSfxAudio.paused && !activeSfxAudio.ended);
+                const isPaused = Boolean(isActive && sfxPaused);
+
                 const playBtn = document.createElement("button");
-                const hasClip = Boolean(sfxClips[key]);
-                playBtn.textContent = activeSfxKey === key ? "Playing" : "Play";
-                playBtn.disabled = !hasClip || controlLockMode;
+                playBtn.textContent = isPlaying ? "Playing" : (isPaused ? "Resume" : "Play");
+                playBtn.disabled = !hasClip || controlLockMode || isPlaying;
                 playBtn.onclick = () => playSfx(key);
                 actions.appendChild(playBtn);
+
+                const pauseBtn = document.createElement("button");
+                pauseBtn.textContent = isPaused ? "Paused" : "Pause";
+                pauseBtn.disabled = controlLockMode || !isPlaying;
+                pauseBtn.onclick = () => pauseSfx();
+                actions.appendChild(pauseBtn);
 
                 const uploadBtn = document.createElement("button");
                 uploadBtn.textContent = "Upload";
@@ -989,7 +1342,10 @@ function uploadSfx(key) {
             recordHistory();
             if (!sfxUploadTargetKey) return;
             sfxClips[sfxUploadTargetKey] = ev.target.result;
+            delete sfxClipDurations[sfxUploadTargetKey];
+            sfxDurationLoadingKeys.delete(sfxUploadTargetKey);
             saveState();
+            loadSfxDuration(sfxUploadTargetKey, sfxClips[sfxUploadTargetKey]);
             renderSfxButtonsState();
             addOperatorLog("SFX Uploaded", getSfxLabel(sfxUploadTargetKey));
             showToast(`${getSfxLabel(sfxUploadTargetKey)} SFX ready`, "ok");
@@ -1010,11 +1366,24 @@ function playSfx(key) {
     }
     const audio = ensureSfxAudio();
     if (!audio) return;
+    const isSameClip = activeSfxKey === key && audio.src === src;
     activeSfxKey = key;
-    audio.pause();
-    audio.src = src;
-    audio.currentTime = 0;
+    if (!isSameClip) {
+        audio.pause();
+        audio.src = src;
+        audio.currentTime = 0;
+    }
     audio.play().catch(() => {});
+    sfxPaused = false;
+    renderSfxButtonsState();
+    updateActiveSfxProgressUI();
+}
+
+function pauseSfx() {
+    if (!activeSfxAudio || !activeSfxKey) return;
+    if (activeSfxAudio.paused) return;
+    activeSfxAudio.pause();
+    sfxPaused = true;
     renderSfxButtonsState();
 }
 
@@ -1023,6 +1392,7 @@ function stopSfx() {
     activeSfxAudio.pause();
     activeSfxAudio.currentTime = 0;
     activeSfxKey = "";
+    sfxPaused = false;
     renderSfxButtonsState();
 }
 
@@ -1034,6 +1404,8 @@ function clearSfx(key) {
         stopSfx();
     }
     sfxClips[key] = "";
+    delete sfxClipDurations[key];
+    sfxDurationLoadingKeys.delete(key);
     saveState();
     renderSfxButtonsState();
     addOperatorLog("SFX Cleared", getSfxLabel(key));
@@ -1070,6 +1442,8 @@ function removeSfxSlot(key) {
     recordHistory();
     if (activeSfxKey === key) stopSfx();
     delete sfxClips[key];
+    delete sfxClipDurations[key];
+    sfxDurationLoadingKeys.delete(key);
     saveState();
     renderSfxButtonsState();
     addOperatorLog("SFX Slot Removed", getSfxLabel(key));
@@ -1929,6 +2303,7 @@ function broadcastUpdate() {
         sponsorLogos,
         hold: holdMode,
         view: viewMode,
+        allViewScroll,
         live: liveMode
     });
 }
@@ -1940,6 +2315,7 @@ function broadcastControlState() {
         standby: standbyMode,
         eventTitle,
         sponsorLogos,
+        allViewScroll,
         standbyMediaSrc,
         standbyMediaType,
         standbyPlaylist,
@@ -2211,6 +2587,9 @@ function renderTeams() {
     teamsToRender.forEach(({ team, index }) => {
         const teamDiv = document.createElement("div");
         teamDiv.className = "team";
+        if (team.teamColor) {
+            teamDiv.style.borderColor = team.teamColor;
+        }
 
         const logoWrap = document.createElement("div");
         logoWrap.className = "team-logo-wrap";
@@ -2247,6 +2626,7 @@ function renderTeams() {
         const score = document.createElement("span");
         score.className = "score";
         score.textContent = team.score;
+        if (team.teamColor) score.style.color = team.teamColor;
         scoreControls.appendChild(score);
 
         const addBtn = document.createElement("button");
@@ -2415,15 +2795,8 @@ function updateScore(index, value) {
 }
 
 function addTeam() {
-    const name = prompt("Enter team name:");
-    if (name && name.trim()) {
-        recordHistory();
-        teams.push({ name: name.trim(), score: 0, logo: "", logoWidth: TEAM_LOGO_FIXED_SIZE, logoHeight: null });
-        renderTeams();
-        saveState();
-        broadcastUpdate();
-        addOperatorLog("Team Added", name.trim());
-    }
+    if (controlLockMode) return;
+    openAddTeamModal();
 }
 
 function editTeamName(index) {
@@ -2655,12 +3028,14 @@ renderTeams();
 updateTimerDisplay();
 syncTimerInputsFromState();
 syncEventHeaderControls();
+updateAllTeamsScrollControls();
 updateTimerBoardMeta();
 syncButtonStates();
 applyControlLockState();
 initModeDateTime();
 initButtonSoundEffects();
 initTopMenu();
+initAddTeamModal();
 initHotkeyUI();
 applyShortcutDockState();
 renderStandbyLibrarySelect();
@@ -2700,6 +3075,12 @@ if (sfxNameInput) {
             event.preventDefault();
             addSfxSlot();
         }
+    });
+}
+const allScrollRange = document.getElementById("all-scroll-range");
+if (allScrollRange) {
+    allScrollRange.addEventListener("input", (event) => {
+        setAllTeamsScroll(event.target.value);
     });
 }
 transport.subscribe((data) => {

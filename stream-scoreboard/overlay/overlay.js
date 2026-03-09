@@ -173,6 +173,7 @@ let presentationState = {
     standbyPlaylist: [],
     adCurrentIndex: 0,
     adHold: false,
+    allViewScroll: 0,
     eventTitle: "TITLE NAME EVENT",
     sponsorLogos: { "1": "", "2": "", "3": "", "4": "" },
     standbyFallbackMode: "message",
@@ -207,6 +208,8 @@ let fireworksBursts = [];
 let fireworksBurstTimer = null;
 let balloonSpawnTimer = null;
 let winnerFadeTimer = null;
+let hasRenderedOverlayTeams = false;
+let previousRenderedTeamKeys = new Set();
 
 function ensureSnowContainer() {
     if (snowContainer) return snowContainer;
@@ -514,8 +517,16 @@ function formatTime(seconds) {
     return `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
 }
 
+function applyAllTeamsScroll(scrollValue) {
+    if (!teamsContainer) return;
+    const ratio = Math.max(0, Math.min(1000, Math.floor(Number(scrollValue) || 0))) / 1000;
+    const maxScroll = Math.max(0, teamsContainer.scrollHeight - teamsContainer.clientHeight);
+    teamsContainer.scrollTop = Math.round(maxScroll * ratio);
+}
+
 function getDisplayTeams(teams, view) {
     const sortedTeams = [...teams].sort((a, b) => b.score - a.score);
+    if (view === "all") return [...teams];
     if (view === "final") return sortedTeams.slice(0, 1);
     if (view === "spotlight") return sortedTeams.slice(0, 2);
     if (view === "top3") return sortedTeams.slice(0, 3);
@@ -558,6 +569,11 @@ function applySponsorLogo(el, src) {
         el.removeAttribute("src");
         el.style.display = "none";
     }
+}
+
+function sanitizeTeamColor(value) {
+    const raw = String(value || "").trim();
+    return /^#[0-9a-fA-F]{6}$/.test(raw) ? raw.toLowerCase() : "";
 }
 
 function updateEventTitleDisplay(titleText) {
@@ -666,7 +682,7 @@ function renderStandbyScreen() {
 }
 
 function renderOverlayState(data) {
-    const { teams, timer, round, hold, view, eventTitle, sponsorLogos } = data;
+    const { teams, timer, round, hold, view, eventTitle, sponsorLogos, allViewScroll } = data;
     const safeTitle = (typeof eventTitle === "string" && eventTitle.trim()) ? eventTitle : "TITLE NAME EVENT";
     timerEl.textContent = formatTime(timer);
     updateEventTitleDisplay(safeTitle);
@@ -682,14 +698,28 @@ function renderOverlayState(data) {
     const isFinalLayout = layout === "final";
     scoreboardScreen.classList.toggle("final-mode", isFinalLayout);
     roundEl.textContent = isFinalLayout ? safeTitle : round;
-    teamsContainer.classList.toggle("dense", displayTeams.length >= 12);
-    teamsContainer.classList.toggle("ultra-dense", displayTeams.length >= 18);
+    const allowDensityCompression = layout !== "all";
+    teamsContainer.classList.toggle("dense", allowDensityCompression && displayTeams.length >= 12);
+    teamsContainer.classList.toggle("ultra-dense", allowDensityCompression && displayTeams.length >= 18);
     timerEl.style.display = isFinalLayout ? "none" : "block";
     teamsContainer.innerHTML = "";
+    const nextRenderedTeamKeys = new Set();
+    const keyCounts = {};
 
     displayTeams.forEach((team, index) => {
+        const baseKey = String(team.name || "team").trim().toLowerCase() || "team";
+        keyCounts[baseKey] = (keyCounts[baseKey] || 0) + 1;
+        const teamKey = `${baseKey}#${keyCounts[baseKey]}`;
+        nextRenderedTeamKeys.add(teamKey);
+
         const card = document.createElement("div");
         card.className = "team-card";
+        const teamColor = sanitizeTeamColor(team?.teamColor);
+        if (teamColor) {
+            card.style.borderColor = teamColor;
+        }
+        const isNewTeamCard = hasRenderedOverlayTeams && !previousRenderedTeamKeys.has(teamKey);
+        if (isNewTeamCard) card.classList.add("team-card-enter");
 
         if (!isFinalLayout) {
             const rank = document.createElement("div");
@@ -698,7 +728,7 @@ function renderOverlayState(data) {
             card.appendChild(rank);
         }
 
-        if (team.logo && !isFinalLayout) {
+        if (team.logo) {
             const logoWrap = document.createElement("div");
             logoWrap.className = "team-logo-wrap";
             const img = document.createElement("img");
@@ -720,10 +750,21 @@ function renderOverlayState(data) {
         const score = document.createElement("div");
         score.className = "team-score";
         score.textContent = String(team.score);
+        if (teamColor) {
+            score.style.color = teamColor;
+            score.style.textShadow = `0 0 16px ${teamColor}88, 0 0 7px rgba(255, 255, 255, 0.2)`;
+        }
         card.appendChild(score);
 
         teamsContainer.appendChild(card);
     });
+    previousRenderedTeamKeys = nextRenderedTeamKeys;
+    hasRenderedOverlayTeams = true;
+    if (layout === "all") {
+        requestAnimationFrame(() => applyAllTeamsScroll(allViewScroll));
+    } else {
+        teamsContainer.scrollTop = 0;
+    }
 
     holdIndicator.style.display = hold ? "block" : "none";
 }
@@ -767,6 +808,7 @@ transport.subscribe((data) => {
             standbyPlaylist: Array.isArray(data.standbyPlaylist) ? data.standbyPlaylist : [],
             adCurrentIndex: Number.isFinite(data.adCurrentIndex) ? Math.max(0, Math.floor(data.adCurrentIndex)) : 0,
             adHold: Boolean(data.adHold),
+            allViewScroll: Math.max(0, Math.min(1000, Math.floor(Number(data.allViewScroll) || 0))),
             adSeekToken: incomingSeekToken,
             standbyFallbackMode: typeof data.standbyFallbackMode === "string" ? data.standbyFallbackMode : "message",
             standbyFallbackData: data.standbyFallbackData && typeof data.standbyFallbackData === "object"
@@ -865,7 +907,8 @@ if (initialState) {
             eventTitle: presentationState.eventTitle,
             sponsorLogos: presentationState.sponsorLogos,
             hold: Boolean(initialState.holdMode),
-            view: typeof initialState.viewMode === "string" ? initialState.viewMode : "all"
+            view: typeof initialState.viewMode === "string" ? initialState.viewMode : "all",
+            allViewScroll: Math.max(0, Math.min(1000, Math.floor(Number(initialState.allViewScroll) || 0)))
         });
     }
 }

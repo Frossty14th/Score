@@ -53,7 +53,7 @@
                 </div>
             </div>
             <div id="sfx-list" class="sfx-list"></div>
-            <div class="sfx-stop-wrap">
+            <div class="sfx-master-controls">
                 <button id="sfx-stop-btn" onclick="stopSfx()">Stop SFX</button>
             </div>
         </div>
@@ -94,6 +94,12 @@
             <input type="text" id="team-search" placeholder="Search team name..." style="width:250px;">
             <button onclick="clearTeamSearch()">Clear Search</button>
             <button onclick="addTeam()">Add Team</button>
+        </div>
+        <div class="panel-row all-scroll-row">
+            <label for="all-scroll-range">All Teams Scroll</label>
+            <input type="range" id="all-scroll-range" min="0" max="1000" value="0">
+            <span id="all-scroll-value">0%</span>
+            <button id="all-scroll-reset-btn" onclick="resetAllTeamsScroll()">Reset</button>
         </div>
         <div id="teams-container"></div>
     </section>
@@ -273,6 +279,47 @@
             </div>
             <div id="hotkey-hint">Press Record, then press your shortcut.</div>
             <div id="hotkey-list"></div>
+        </div>
+    </div>
+</div>
+
+<div id="add-team-modal" class="modal-backdrop" style="display:none;">
+    <div class="modal-card add-team-modal-card">
+        <div class="modal-head">
+            <h3>Add Team</h3>
+            <div class="modal-actions">
+                <button data-lock-exempt onclick="closeAddTeamModal()">Close</button>
+            </div>
+        </div>
+        <div class="modal-body">
+            <div class="add-team-form">
+                <label for="add-team-name">Team Name</label>
+                <input id="add-team-name" type="text" maxlength="40" placeholder="Enter team name">
+
+                <label for="add-team-score">Starting Score</label>
+                <input id="add-team-score" type="number" min="0" max="9999" value="0">
+
+                <label for="add-team-logo-width">Logo Width (px)</label>
+                <div class="add-team-inline">
+                    <input id="add-team-logo-width" type="range" min="60" max="240" value="150">
+                    <input id="add-team-logo-width-num" type="number" min="60" max="240" value="150">
+                </div>
+
+                <label for="add-team-color">Team Color</label>
+                <div class="add-team-inline">
+                    <input id="add-team-color" type="color" value="#44d07c">
+                    <input id="add-team-color-text" type="text" value="#44d07c" maxlength="7">
+                </div>
+
+                <label for="add-team-logo-file">Team Logo (PNG / JPG / GIF)</label>
+                <input id="add-team-logo-file" type="file" accept=".png,.jpg,.jpeg,.gif,image/png,image/jpeg,image/gif">
+                <img id="add-team-logo-preview" alt="Team logo preview" style="display:none;">
+
+                <div class="add-team-actions">
+                    <button onclick="createTeamFromModal()">Create Team</button>
+                    <button onclick="closeAddTeamModal()">Cancel</button>
+                </div>
+            </div>
         </div>
     </div>
 </div>
