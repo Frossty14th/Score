@@ -88,101 +88,131 @@
 </div>
 
 <div class="control-grid">
-    <section class="panel panel-teams">
-        <h3>Team List</h3>
-        <div class="panel-row">
-            <input type="text" id="team-search" placeholder="Search team name..." style="width:250px;">
-            <button onclick="clearTeamSearch()">Clear Search</button>
-            <button onclick="addTeam()">Add Team</button>
+    <section class="panel panel-teams" id="panel-teams">
+        <div class="panel-head">
+            <h3>Team List</h3>
+            <button class="panel-collapse" type="button" onclick="togglePanel('panel-teams')">Collapse</button>
         </div>
-        <div class="panel-row all-scroll-row">
-            <label for="all-scroll-range">All Teams Scroll</label>
-            <input type="range" id="all-scroll-range" min="0" max="1000" value="0">
-            <span id="all-scroll-value">0%</span>
-            <button id="all-scroll-reset-btn" onclick="resetAllTeamsScroll()">Reset</button>
-        </div>
-        <div id="teams-container"></div>
-    </section>
-
-    <section class="panel panel-timer">
-        <h3>Timer</h3>
-        <div class="timer-meta">
-            <span id="timer-status" class="timer-status paused">Paused</span>
-            <span id="timer-base">Base: 05:00</span>
-        </div>
-        <div id="timer">00:00</div>
-        <div class="panel-row timer-actions">
-            <button onclick="startTimer()" title="Start countdown timer">Start</button>
-            <button onclick="pauseTimer()" title="Pause countdown timer">Pause</button>
-            <button onclick="resetTimer()" title="Reset timer to base value">Reset</button>
-            <button onclick="setTimer()">Set Time (Prompt)</button>
-        </div>
-        <div class="panel-row timer-setup">
-            <label>Set Min</label>
-            <input type="number" id="timer-minutes-input" min="0" max="999" value="5" style="width:70px;">
-            <label>Set Sec</label>
-            <input type="number" id="timer-seconds-input" min="0" max="59" value="0" style="width:70px;">
-            <button onclick="applyTimerFromInputs()">Set Timer</button>
-            <button onclick="resetTimer()">Reset To Base</button>
-        </div>
-        <div class="panel-row timer-presets">
-            <label>Presets</label>
-            <button onclick="setTimerPreset(60)">1:00</button>
-            <button onclick="setTimerPreset(180)">3:00</button>
-            <button onclick="setTimerPreset(300)">5:00</button>
-            <button onclick="setTimerPreset(600)">10:00</button>
-        </div>
-        <div class="panel-row timer-adjust">
-            <label>Adjust</label>
-            <button onclick="addSeconds(5)">+5 sec</button>
-            <button onclick="addSeconds(10)">+10 sec</button>
-            <button onclick="addSeconds(20)">+20 sec</button>
-            <input type="number" id="timer-adjust-input" value="15" style="width:70px;">
-            <button onclick="applyTimerAdjust(1)">+Custom</button>
-            <button onclick="applyTimerAdjust(-1)">-Custom</button>
-        </div>
-        <div class="panel-row timer-lock-row">
-            <button id="lock-btn" onclick="toggleControlLock()" title="Lock all controls except unlock">Lock: OFF</button>
+        <div class="panel-body">
+            <div class="panel-sub">
+                <div class="panel-row team-status-row">
+                    <span class="status-chip" id="status-live-inline">Live: OFF</span>
+                    <span class="status-chip" id="status-standby-inline">Standby: ON</span>
+                    <span class="status-chip" id="status-hold-inline">Hold: OFF</span>
+                </div>
+                <div class="panel-row">
+                    <input type="text" id="team-search" placeholder="Search team name..." style="width:250px;">
+                    <button onclick="clearTeamSearch()">Clear Search</button>
+                    <button onclick="addTeam()">Add Team</button>
+                </div>
+                <div class="panel-row all-scroll-row">
+                    <label for="all-scroll-range">All View Scroll</label>
+                    <input type="range" id="all-scroll-range" min="0" max="1000" value="0">
+                    <span id="all-scroll-value">0%</span>
+                    <button id="all-scroll-reset-btn" onclick="resetAllTeamsScroll()">Reset</button>
+                </div>
+            </div>
+            <div id="teams-container"></div>
         </div>
     </section>
 
-    <section class="panel panel-ad">
-        <h3>Advertisement</h3>
-        <div class="panel-row">
-            <button onclick="uploadStandbyMedia()">Upload Single Media</button>
-            <button onclick="showPreviewOnOverlay()">Show On Overlay</button>
-            <button onclick="togglePreviewPlayback()">Preview Play/Pause</button>
-            <button onclick="clearStandbyMedia()">Clear Standby Media</button>
+    <section class="panel panel-timer" id="panel-timer">
+        <div class="panel-head">
+            <h3>Timer</h3>
+            <button class="panel-collapse" type="button" onclick="togglePanel('panel-timer')">Collapse</button>
         </div>
-        <div id="ad-status">Ad media: none</div>
-        <div class="ad-preview">
-            <div class="ad-preview-title">Ad Preview (Control Only)</div>
-            <img id="ad-preview-image" alt="Ad preview image" />
-            <video id="ad-preview-video" muted loop playsinline></video>
-            <div class="ad-preview-controls" id="ad-preview-controls">
-                <button type="button" onclick="previewPlayPause()">Play/Pause</button>
-                <button type="button" onclick="previewStop()">Stop</button>
-                <button type="button" onclick="previewSeek(-5)">-5s</button>
-                <button type="button" onclick="previewSeek(5)">+5s</button>
+        <div class="panel-body">
+            <div class="timer-meta">
+                <span id="timer-status" class="timer-status paused">Paused</span>
+                <span id="timer-base">Base: 05:00</span>
             </div>
-            <div class="ad-preview-timeline" id="ad-preview-timeline-wrap">
-                <span id="ad-preview-time">00:00 / 00:00</span>
-                <input type="range" id="ad-preview-seek" min="0" max="1000" value="0" step="1">
+            <div id="timer">00:00</div>
+            <div class="panel-row timer-actions">
+                <button onclick="startTimer()" title="Start countdown timer">Start</button>
+                <button onclick="pauseTimer()" title="Pause countdown timer">Pause</button>
+                <button onclick="resetTimer()" title="Reset timer to base value">Reset</button>
+                <button onclick="setTimer()">Set Time</button>
             </div>
-            <div id="ad-preview-name">No media selected</div>
+            <button class="collapse-toggle" type="button" onclick="toggleTimerAdvanced()">Advanced Timer</button>
+            <div id="timer-advanced" class="timer-advanced">
+                <div class="panel-row timer-setup">
+                    <label>Minutes</label>
+                    <input type="number" id="timer-minutes-input" min="0" max="999" value="5" style="width:70px;">
+                    <label>Seconds</label>
+                    <input type="number" id="timer-seconds-input" min="0" max="59" value="0" style="width:70px;">
+                    <button onclick="applyTimerFromInputs()">Apply</button>
+                    <button onclick="resetTimer()">Reset Base</button>
+                </div>
+                <div class="panel-row timer-presets">
+                    <label>Presets</label>
+                    <button onclick="setTimerPreset(60)">1:00</button>
+                    <button onclick="setTimerPreset(180)">3:00</button>
+                    <button onclick="setTimerPreset(300)">5:00</button>
+                    <button onclick="setTimerPreset(600)">10:00</button>
+                </div>
+                <div class="panel-row timer-adjust">
+                    <label>Adjust</label>
+                    <button onclick="addSeconds(5)">+5 sec</button>
+                    <button onclick="addSeconds(10)">+10 sec</button>
+                    <button onclick="addSeconds(20)">+20 sec</button>
+                    <input type="number" id="timer-adjust-input" value="15" style="width:70px;">
+                    <button onclick="applyTimerAdjust(1)">+Custom</button>
+                    <button onclick="applyTimerAdjust(-1)">-Custom</button>
+                </div>
+            </div>
+            <div class="panel-row timer-lock-row">
+                <button id="lock-btn" onclick="toggleControlLock()" title="Lock all controls except unlock">Lock: OFF</button>
+            </div>
+            <div class="ad-preview ad-preview-compact">
+                <div class="ad-preview-title">Ad Preview (Control Only)</div>
+                <img id="ad-preview-image" alt="Ad preview image" />
+                <video id="ad-preview-video" muted loop playsinline></video>
+                <div class="ad-preview-controls" id="ad-preview-controls">
+                    <button type="button" onclick="previewPlayPause()">Play/Pause</button>
+                    <button type="button" onclick="previewStop()">Stop</button>
+                    <button type="button" onclick="previewSeek(-5)">-5s</button>
+                    <button type="button" onclick="previewSeek(5)">+5s</button>
+                </div>
+                <div class="ad-preview-timeline" id="ad-preview-timeline-wrap">
+                    <span id="ad-preview-time">00:00 / 00:00</span>
+                    <input type="range" id="ad-preview-seek" min="0" max="1000" value="0" step="1">
+                </div>
+                <div id="ad-preview-name">No media selected</div>
+            </div>
         </div>
-        <div class="panel-row">
-            <label>Fallback</label>
-            <select id="fallback-mode">
-                <option value="message">Message</option>
-                <option value="dvd">DVD</option>
-            </select>
-            <input type="text" id="fallback-title" placeholder="Fallback title" style="width:180px;">
-            <input type="text" id="fallback-subtitle" placeholder="Fallback subtitle" style="width:180px;">
-            <button onclick="uploadFallbackDvdImage()">Upload DVD Image</button>
-            <button onclick="clearFallbackDvdImage()">Clear DVD Image</button>
-            <button onclick="testFallbackSnow()">Test Snow</button>
-            <button onclick="applyFallbackSettings()">Apply Fallback</button>
+    </section>
+
+    <section class="panel panel-ad" id="panel-ad">
+        <div class="panel-head">
+            <h3>Advertisement</h3>
+            <button class="panel-collapse" type="button" onclick="togglePanel('panel-ad')">Collapse</button>
+        </div>
+        <div class="panel-body">
+            <div id="ad-status">Ad media: none</div>
+            <div class="ad-library">
+                <div class="ad-preview-title">Ad Library</div>
+                <select id="standby-media-select" size="6"></select>
+                <div class="panel-row ad-library-actions">
+                    <button onclick="uploadStandbyLibrary()">Add Media</button>
+                    <button onclick="loadAdvertAssetsLibrary()">Load From Assets</button>
+                    <button onclick="publishSelectedAdToOverlay()">Show Selected</button>
+                    <button onclick="removeSelectedStandbyMedia()">Remove Selected</button>
+                    <button onclick="clearAdLibrary()">Clear List</button>
+                </div>
+            </div>
+            <div class="panel-row">
+                <label>Fallback</label>
+                <select id="fallback-mode">
+                    <option value="message">Message</option>
+                    <option value="dvd">DVD</option>
+                </select>
+                <input type="text" id="fallback-title" placeholder="Fallback title" style="width:180px;">
+                <input type="text" id="fallback-subtitle" placeholder="Fallback subtitle" style="width:180px;">
+                <button onclick="uploadFallbackDvdImage()">Upload DVD Image</button>
+                <button onclick="clearFallbackDvdImage()">Clear DVD Image</button>
+                <button onclick="testFallbackSnow()">Test Snow</button>
+                <button onclick="applyFallbackSettings()">Apply Fallback</button>
+            </div>
         </div>
     </section>
 </div>
@@ -206,7 +236,7 @@
 
 <!-- Hidden file input for logos -->
 <input type="file" id="logo-upload" accept="image/*" style="display:none;">
-<input type="file" id="standby-upload" accept="image/*,video/*" style="display:none;">
+<input type="file" id="standby-library-upload" accept="image/*,video/*" multiple style="display:none;">
 <input type="file" id="advertisement-folder-input" accept="image/*,video/*" webkitdirectory directory multiple style="display:none;">
 <input type="file" id="fallback-dvd-upload" accept="image/*" style="display:none;">
 <input type="file" id="sponsor-1-upload" accept="image/*" style="display:none;">

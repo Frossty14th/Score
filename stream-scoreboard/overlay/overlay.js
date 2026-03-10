@@ -184,6 +184,14 @@ let presentationState = {
 };
 
 let standbyPlaybackIndex = 0;
+let adAdvanceTimer = null;
+const IMAGE_AD_DURATION_MS = 8000;
+let allScrollTarget = null;
+let allScrollCurrent = 0;
+let allScrollVelocity = 0;
+let allScrollRaf = null;
+const ALL_SCROLL_SPRING = 0.12;
+const ALL_SCROLL_DAMPING = 0.78;
 let lastAppliedSeekToken = -1;
 let dvdFrame = null;
 let snowContainer = null;
@@ -210,6 +218,8 @@ let balloonSpawnTimer = null;
 let winnerFadeTimer = null;
 let hasRenderedOverlayTeams = false;
 let previousRenderedTeamKeys = new Set();
+let holdFreezeActive = false;
+let frozenOverlayState = null;
 
 function ensureSnowContainer() {
     if (snowContainer) return snowContainer;
@@ -521,7 +531,34 @@ function applyAllTeamsScroll(scrollValue) {
     if (!teamsContainer) return;
     const ratio = Math.max(0, Math.min(1000, Math.floor(Number(scrollValue) || 0))) / 1000;
     const maxScroll = Math.max(0, teamsContainer.scrollHeight - teamsContainer.clientHeight);
-    teamsContainer.scrollTop = Math.round(maxScroll * ratio);
+    const target = maxScroll * ratio;
+    allScrollTarget = target;
+    if (allScrollRaf) return;
+
+    const step = () => {
+        if (!teamsContainer || allScrollTarget === null) {
+            allScrollRaf = null;
+            return;
+        }
+
+        const current = Number.isFinite(allScrollCurrent) ? allScrollCurrent : teamsContainer.scrollTop;
+        const delta = allScrollTarget - current;
+        allScrollVelocity = (allScrollVelocity + delta * ALL_SCROLL_SPRING) * ALL_SCROLL_DAMPING;
+        allScrollCurrent = current + allScrollVelocity;
+        teamsContainer.scrollTop = allScrollCurrent;
+
+        if (Math.abs(delta) < 0.5 && Math.abs(allScrollVelocity) < 0.5) {
+            teamsContainer.scrollTop = allScrollTarget;
+            allScrollCurrent = allScrollTarget;
+            allScrollVelocity = 0;
+            allScrollRaf = null;
+            return;
+        }
+
+        allScrollRaf = requestAnimationFrame(step);
+    };
+
+    allScrollRaf = requestAnimationFrame(step);
 }
 
 function getDisplayTeams(teams, view) {
@@ -619,7 +656,7 @@ function updateEventTitleDisplay(titleText) {
 }
 
 function renderStandbyScreen() {
-    const { standby, standbyMediaType, standbyMediaSrc } = presentationState;
+    const { standby } = presentationState;
     const resetStandbyMedia = () => {
         standbyVideo.onended = null;
         standbyVideo.onerror = null;
@@ -627,11 +664,28 @@ function renderStandbyScreen() {
         standbyVideo.onloadedmetadata = null;
         standbyVideo.pause();
     };
+    const clearAdAdvanceTimer = () => {
+        if (adAdvanceTimer) {
+            clearTimeout(adAdvanceTimer);
+            adAdvanceTimer = null;
+        }
+    };
+    const playlist = Array.isArray(presentationState.standbyPlaylist)
+        ? presentationState.standbyPlaylist.filter((item) => item && typeof item.path === "string" && item.path.trim())
+        : [];
+    const hasPlaylist = playlist.length > 0;
+    if (hasPlaylist) {
+        standbyPlaybackIndex = ((standbyPlaybackIndex % playlist.length) + playlist.length) % playlist.length;
+    }
+    const activeItem = hasPlaylist ? playlist[standbyPlaybackIndex] : null;
+    const standbyMediaSrc = activeItem?.path || presentationState.standbyMediaSrc;
+    const standbyMediaType = activeItem?.type || presentationState.standbyMediaType;
 
     if (!standby) {
         standbyScreen.style.display = "none";
         stopDvdBounce();
         resetStandbyMedia();
+        clearAdAdvanceTimer();
         return;
     }
 
@@ -641,6 +695,7 @@ function renderStandbyScreen() {
     stopDvdBounce();
     standbyMessage.style.display = "none";
     standbySubmessage.style.display = "none";
+    clearAdAdvanceTimer();
 
     if (!standbyMediaSrc) {
         const fallbackTitle = presentationState.standbyFallbackData?.title || "Standby";
@@ -672,17 +727,51 @@ function renderStandbyScreen() {
             standbyVideo.src = standbyMediaSrc;
             standbyVideo.dataset.path = standbyMediaSrc;
         }
-        standbyVideo.loop = true;
+        const shouldAutoAdvance = hasPlaylist && playlist.length > 1 && !presentationState.adHold;
+        standbyVideo.loop = false;
+        standbyVideo.onended = shouldAutoAdvance
+            ? () => {
+                standbyPlaybackIndex = (standbyPlaybackIndex + 1) % playlist.length;
+                presentationState.adCurrentIndex = standbyPlaybackIndex;
+                renderStandbyScreen();
+            }
+            : null;
         standbyVideo.style.display = "block";
         standbyVideo.play().catch(() => {});
     } else {
         standbyImage.src = standbyMediaSrc;
         standbyImage.style.display = "block";
+        if (hasPlaylist && playlist.length > 1 && !presentationState.adHold) {
+            adAdvanceTimer = setTimeout(() => {
+                standbyPlaybackIndex = (standbyPlaybackIndex + 1) % playlist.length;
+                presentationState.adCurrentIndex = standbyPlaybackIndex;
+                renderStandbyScreen();
+            }, IMAGE_AD_DURATION_MS);
+        }
     }
 }
 
 function renderOverlayState(data) {
-    const { teams, timer, round, hold, view, eventTitle, sponsorLogos, allViewScroll } = data;
+    const incomingHold = Boolean(data.hold);
+    if (incomingHold && !holdFreezeActive) {
+        holdFreezeActive = true;
+        frozenOverlayState = {
+            teams: Array.isArray(data.teams) ? data.teams : [],
+            timer: Number.isFinite(data.timer) ? data.timer : 0,
+            round: typeof data.round === "string" ? data.round : "ROUND 1",
+            view: typeof data.view === "string" ? data.view : "all",
+            eventTitle: typeof data.eventTitle === "string" ? data.eventTitle : "TITLE NAME EVENT",
+            sponsorLogos: data.sponsorLogos,
+            allViewScroll: Math.max(0, Math.min(1000, Math.floor(Number(data.allViewScroll) || 0)))
+        };
+    }
+    if (!incomingHold && holdFreezeActive) {
+        holdFreezeActive = false;
+        frozenOverlayState = null;
+    }
+
+    const source = holdFreezeActive && frozenOverlayState ? frozenOverlayState : data;
+    const { teams, timer, round, view, eventTitle, sponsorLogos, allViewScroll } = source;
     const safeTitle = (typeof eventTitle === "string" && eventTitle.trim()) ? eventTitle : "TITLE NAME EVENT";
     timerEl.textContent = formatTime(timer);
     updateEventTitleDisplay(safeTitle);
@@ -714,6 +803,9 @@ function renderOverlayState(data) {
 
         const card = document.createElement("div");
         card.className = "team-card";
+        if (index === 0) card.classList.add("rank-1");
+        if (index === 1) card.classList.add("rank-2");
+        if (index === 2) card.classList.add("rank-3");
         const teamColor = sanitizeTeamColor(team?.teamColor);
         if (teamColor) {
             card.style.borderColor = teamColor;
@@ -766,7 +858,7 @@ function renderOverlayState(data) {
         teamsContainer.scrollTop = 0;
     }
 
-    holdIndicator.style.display = hold ? "block" : "none";
+    holdIndicator.style.display = incomingHold ? "block" : "none";
 }
 
 window.addEventListener("resize", () => {
@@ -784,6 +876,8 @@ function renderScreenMode() {
         stopWinnerCelebration();
         scoreboardScreen.style.display = "none";
         holdIndicator.style.display = "none";
+        holdFreezeActive = false;
+        frozenOverlayState = null;
         renderStandbyScreen();
     }
 }

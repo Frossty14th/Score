@@ -17,13 +17,12 @@
 
 body {
     margin: 0;
-    padding: 14px;
+    padding: 16px;
     background: radial-gradient(circle at top, #1a2431 0%, var(--bg) 45%);
     color: var(--text);
     font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-    max-width: 1320px;
-    margin-left: auto;
-    margin-right: auto;
+    max-width: none;
+    width: 100%;
 }
 
 @media (min-width: 1024px) {
@@ -42,7 +41,9 @@ h3 {
     margin: 10px 0 8px;
     color: var(--muted);
     font-weight: 600;
-    font-size: 15px;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
 }
 
 .topbar {
@@ -107,18 +108,37 @@ h3 {
 
 .control-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(380px, 1.4fr) minmax(320px, 0.95fr) minmax(280px, 0.75fr);
     grid-template-areas:
-        "teams teams teams"
-        "timer ad ad";
-    gap: 10px;
+        "teams timer ad"
+        "teams timer ad";
+    gap: 12px;
+}
+
+@media (max-width: 1200px) {
+    .control-grid {
+        grid-template-columns: minmax(320px, 1.2fr) minmax(280px, 0.9fr);
+        grid-template-areas:
+            "teams teams"
+            "timer ad";
+    }
+}
+
+@media (max-width: 900px) {
+    .control-grid {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "teams"
+            "timer"
+            "ad";
+    }
 }
 
 .panel {
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.02) 100%);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 10px;
+    border-radius: 12px;
+    padding: 12px;
     box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
 }
 
@@ -131,6 +151,28 @@ h3 {
     align-items: flex-start;
     justify-content: space-between;
     gap: 10px;
+}
+
+.panel-body {
+    margin-top: 6px;
+}
+
+.panel-sub {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.02);
+    margin-bottom: 8px;
+}
+
+.panel-collapse {
+    min-width: 86px;
+    font-size: 11px;
+    padding: 6px 8px;
+}
+
+.panel.collapsed .panel-body {
+    display: none;
 }
 
 #mode-datetime {
@@ -189,8 +231,8 @@ h3 {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 4px;
-    margin-bottom: 6px;
+    gap: 6px;
+    margin-bottom: 8px;
 }
 
 #history-meta {
@@ -207,10 +249,41 @@ h3 {
     margin-bottom: 0;
 }
 
+.team-status-row {
+    margin-bottom: 8px;
+}
+
+.team-quick-row {
+    margin-bottom: 8px;
+}
+
+.collapse-toggle {
+    width: 100%;
+    margin: 6px 0;
+    text-align: left;
+    font-weight: 700;
+}
+
+.timer-advanced {
+    display: none;
+    padding: 6px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.03);
+    margin-bottom: 6px;
+}
+
+.timer-advanced.open {
+    display: block;
+}
+
 .panel-mode { grid-column: 1 / -1; }
 .panel-teams { grid-area: teams; }
 .panel-timer { grid-area: timer; }
 .panel-ad { grid-area: ad; }
+.panel-teams {
+    display: block;
+}
 
 button,
 select,
@@ -366,6 +439,26 @@ input[type="number"] {
     background: #111;
 }
 
+.ad-preview-compact #ad-preview-image,
+.ad-preview-compact #ad-preview-video {
+    max-height: 140px;
+    min-height: 110px;
+}
+
+.ad-preview-compact .ad-preview-controls button {
+    padding: 5px 6px;
+    font-size: 10px;
+}
+
+.ad-preview-compact .ad-preview-timeline {
+    grid-template-columns: 70px 1fr;
+}
+
+.ad-preview-compact #ad-preview-time {
+    font-size: 10px;
+    min-width: 70px;
+}
+
 .ad-preview-controls {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -406,6 +499,41 @@ input[type="number"] {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.ad-preview-publish {
+    margin-top: 6px;
+    width: 100%;
+}
+
+.ad-library {
+    margin-top: 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+#standby-media-select {
+    width: 100%;
+    min-height: 140px;
+    margin-top: 6px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: rgba(8, 8, 16, 0.6);
+    color: var(--text);
+    padding: 6px;
+    font-size: 12px;
+}
+
+.ad-library-actions {
+    margin-top: 6px;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.ad-library-actions button {
+    flex: 1 1 160px;
 }
 
 #timer {
@@ -553,20 +681,23 @@ input[type="number"] {
 
 .sfx-list {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(10, minmax(0, 1fr));
     gap: 6px;
+    max-height: calc(7 * 86px);
+    overflow-y: auto;
+    padding-right: 4px;
 }
 
 .sfx-slot {
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 6px;
+    padding: 4px;
     background: rgba(255, 255, 255, 0.02);
 }
 
 .sfx-slot strong {
     display: block;
-    font-size: 11px;
+    font-size: 10px;
     color: var(--muted);
     margin-bottom: 2px;
     letter-spacing: 0.3px;
@@ -574,16 +705,16 @@ input[type="number"] {
 
 .sfx-duration {
     display: block;
-    font-size: 10px;
+    font-size: 9px;
     color: #8ea1be;
-    margin-bottom: 4px;
+    margin-bottom: 3px;
     font-variant-numeric: tabular-nums;
 }
 
 .sfx-progress {
     display: grid;
-    gap: 3px;
-    margin-bottom: 6px;
+    gap: 2px;
+    margin-bottom: 4px;
 }
 
 .sfx-progress-time {
@@ -599,13 +730,13 @@ input[type="number"] {
 .sfx-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 4px;
+    gap: 3px;
 }
 
 .sfx-actions button {
     min-width: 0;
-    padding: 6px 6px;
-    font-size: 11px;
+    padding: 5px 6px;
+    font-size: 10px;
 }
 
 .sfx-master-controls {

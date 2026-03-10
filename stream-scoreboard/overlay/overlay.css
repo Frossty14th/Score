@@ -26,8 +26,8 @@ body {
   position: fixed;
   inset: 0;
   display: none;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: stretch;
   background: #000;
   z-index: 1000;
 }
@@ -94,10 +94,14 @@ body {
 
 #standby-screen img,
 #standby-screen video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  position: absolute;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  object-fit: contain;
+  object-position: center center;
   display: none;
+  background: #000;
 }
 
 #standby-dvd {
@@ -473,16 +477,16 @@ body {
   position: absolute;
   top: 8px;
   left: 8px;
-  min-width: 38px;
+  min-width: 32px;
   text-align: center;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 900;
   color: #f4fbff;
-  background: linear-gradient(135deg, rgba(0, 185, 255, 0.85), rgba(108, 94, 255, 0.86));
-  border: 1px solid rgba(188, 235, 255, 0.95);
+  background: linear-gradient(135deg, rgba(0, 185, 255, 0.65), rgba(108, 94, 255, 0.68));
+  border: 1px solid rgba(188, 235, 255, 0.55);
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.65);
   border-radius: 999px;
-  padding: 4px 10px;
+  padding: 3px 8px;
 }
 
 .team-logo-wrap {
@@ -490,7 +494,7 @@ body {
   height: 42%;
   margin-top: 14px;
   border-radius: 10px;
-  border: 1px solid rgba(160, 230, 255, 0.24);
+  border: 1px solid rgba(160, 230, 255, 0.18);
   background: rgba(255, 255, 255, 0.03);
   display: flex;
   align-items: center;
@@ -520,7 +524,7 @@ body {
   display: block;
   margin: 0;
   object-fit: contain;
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5));
   max-width: 92%;
   max-height: 92%;
   width: auto !important;
@@ -532,6 +536,7 @@ body {
   font-size: clamp(15px, 1.3vw, 18px);
   font-weight: 800;
   line-height: 1.2;
+  min-height: 2.4em;
   letter-spacing: 0.2px;
   text-align: center;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
@@ -557,6 +562,24 @@ body {
   letter-spacing: 0.5px;
   line-height: 1;
   text-shadow: 0 0 16px rgba(180, 255, 117, 0.45), 0 0 7px rgba(255, 255, 255, 0.2);
+  background: rgba(8, 10, 22, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+
+.team-card.rank-1 {
+  border-color: rgba(255, 214, 102, 0.95);
+  box-shadow: 0 0 18px rgba(255, 214, 102, 0.25), var(--ov-shadow);
+}
+
+.team-card.rank-2 {
+  border-color: rgba(184, 211, 255, 0.9);
+  box-shadow: 0 0 16px rgba(184, 211, 255, 0.22), var(--ov-shadow);
+}
+
+.team-card.rank-3 {
+  border-color: rgba(255, 175, 110, 0.9);
+  box-shadow: 0 0 16px rgba(255, 175, 110, 0.22), var(--ov-shadow);
 }
 
 .team-text {
