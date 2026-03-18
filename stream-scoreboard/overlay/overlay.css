@@ -1,10 +1,7 @@
 :root {
   --ov-text: #f8fbff;
   --ov-muted: #d2dcff;
-  --ov-accent: #00e5ff;
-  --ov-accent-2: #ff3fb2;
   --ov-danger: #ff5a6d;
-  --ov-card-bg: rgba(15, 16, 42, 0.72);
   --ov-card-border: rgba(120, 220, 255, 0.62);
   --ov-shadow: 0 14px 28px rgba(0, 0, 0, 0.45);
   --ov-bg-base: rgba(24, 18, 46, 0.7);
@@ -473,6 +470,11 @@ body {
   box-shadow: 0 0 18px rgba(0, 229, 255, 0.24), 0 0 26px rgba(255, 63, 178, 0.16), var(--ov-shadow);
 }
 
+.team-card.team-card-moving {
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease, box-shadow 0.2s ease;
+  will-change: transform;
+}
+
 .rank {
   position: absolute;
   top: 8px;
@@ -500,10 +502,6 @@ body {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-}
-
-.team-logo-wrap.empty {
-  opacity: 0.9;
 }
 
 .team-card.no-logo {
@@ -582,16 +580,6 @@ body {
   box-shadow: 0 0 16px rgba(255, 175, 110, 0.22), var(--ov-shadow);
 }
 
-.team-text {
-  font-size: clamp(17px, 2.2vw, 26px);
-  font-weight: 800;
-  line-height: 1.15;
-  letter-spacing: 0.2px;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 #teams-container[data-layout="spotlight"] {
   grid-template-columns: repeat(2, minmax(360px, 520px));
   justify-content: center;
@@ -639,7 +627,7 @@ body {
   padding-bottom: var(--all-pad-y);
   padding-left: var(--all-pad-x);
   padding-right: var(--all-pad-x);
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   justify-content: center;
   align-content: start;
   scrollbar-width: none;

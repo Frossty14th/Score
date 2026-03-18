@@ -186,12 +186,13 @@ let presentationState = {
 let standbyPlaybackIndex = 0;
 let adAdvanceTimer = null;
 const IMAGE_AD_DURATION_MS = 8000;
-let allScrollTarget = null;
 let allScrollCurrent = 0;
 let allScrollVelocity = 0;
 let allScrollRaf = null;
-const ALL_SCROLL_SPRING = 0.12;
-const ALL_SCROLL_DAMPING = 0.78;
+let allScrollRatio = 0;
+let allScrollResizeObserver = null;
+let allScrollRatioPending = null;
+let allScrollApplyFrame = null;
 let lastAppliedSeekToken = -1;
 let dvdFrame = null;
 let snowContainer = null;
@@ -220,6 +221,7 @@ let hasRenderedOverlayTeams = false;
 let previousRenderedTeamKeys = new Set();
 let holdFreezeActive = false;
 let frozenOverlayState = null;
+let previousOverlayLayout = "";
 
 function ensureSnowContainer() {
     if (snowContainer) return snowContainer;
@@ -527,38 +529,36 @@ function formatTime(seconds) {
     return `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
 }
 
+function syncAllTeamsScrollToRatio() {
+    if (!teamsContainer) return;
+    const maxScroll = Math.max(0, teamsContainer.scrollHeight - teamsContainer.clientHeight);
+    const target = maxScroll * allScrollRatio;
+    allScrollCurrent = target;
+    teamsContainer.scrollTop = target;
+}
+
+function scheduleAllTeamsScrollApply(scrollValue) {
+    if (allScrollApplyFrame) {
+        cancelAnimationFrame(allScrollApplyFrame);
+    }
+    allScrollApplyFrame = requestAnimationFrame(() => {
+        allScrollApplyFrame = null;
+        applyAllTeamsScroll(scrollValue);
+    });
+}
+
 function applyAllTeamsScroll(scrollValue) {
     if (!teamsContainer) return;
     const ratio = Math.max(0, Math.min(1000, Math.floor(Number(scrollValue) || 0))) / 1000;
-    const maxScroll = Math.max(0, teamsContainer.scrollHeight - teamsContainer.clientHeight);
-    const target = maxScroll * ratio;
-    allScrollTarget = target;
+    allScrollRatioPending = ratio;
     if (allScrollRaf) return;
-
-    const step = () => {
-        if (!teamsContainer || allScrollTarget === null) {
-            allScrollRaf = null;
-            return;
-        }
-
-        const current = Number.isFinite(allScrollCurrent) ? allScrollCurrent : teamsContainer.scrollTop;
-        const delta = allScrollTarget - current;
-        allScrollVelocity = (allScrollVelocity + delta * ALL_SCROLL_SPRING) * ALL_SCROLL_DAMPING;
-        allScrollCurrent = current + allScrollVelocity;
-        teamsContainer.scrollTop = allScrollCurrent;
-
-        if (Math.abs(delta) < 0.5 && Math.abs(allScrollVelocity) < 0.5) {
-            teamsContainer.scrollTop = allScrollTarget;
-            allScrollCurrent = allScrollTarget;
-            allScrollVelocity = 0;
-            allScrollRaf = null;
-            return;
-        }
-
-        allScrollRaf = requestAnimationFrame(step);
-    };
-
-    allScrollRaf = requestAnimationFrame(step);
+    allScrollRaf = requestAnimationFrame(() => {
+        allScrollRaf = null;
+        if (allScrollRatioPending === null) return;
+        allScrollRatio = allScrollRatioPending;
+        allScrollRatioPending = null;
+        syncAllTeamsScrollToRatio();
+    });
 }
 
 function getDisplayTeams(teams, view) {
@@ -783,6 +783,12 @@ function renderOverlayState(data) {
 
     const displayTeams = getDisplayTeams(teams, view);
     const layout = getOverlayLayout(view, displayTeams.length);
+    const previousCardRects = new Map();
+    if (previousOverlayLayout === layout) {
+        teamsContainer.querySelectorAll(".team-card[data-team-key]").forEach((card) => {
+            previousCardRects.set(card.dataset.teamKey, card.getBoundingClientRect());
+        });
+    }
     teamsContainer.dataset.layout = layout;
     const isFinalLayout = layout === "final";
     scoreboardScreen.classList.toggle("final-mode", isFinalLayout);
@@ -803,6 +809,7 @@ function renderOverlayState(data) {
 
         const card = document.createElement("div");
         card.className = "team-card";
+        card.dataset.teamKey = teamKey;
         if (index === 0) card.classList.add("rank-1");
         if (index === 1) card.classList.add("rank-2");
         if (index === 2) card.classList.add("rank-3");
@@ -828,6 +835,11 @@ function renderOverlayState(data) {
             img.className = "team-logo";
             img.style.width = `${team.logoWidth}px`;
             img.style.height = team.logoHeight === null ? "auto" : `${team.logoHeight}px`;
+            if (layout === "all") {
+                img.addEventListener("load", () => {
+                    scheduleAllTeamsScrollApply(allViewScroll);
+                }, { once: true });
+            }
             logoWrap.appendChild(img);
             card.appendChild(logoWrap);
         } else {
@@ -850,10 +862,40 @@ function renderOverlayState(data) {
 
         teamsContainer.appendChild(card);
     });
+    const cardsToAnimate = [];
+    if (previousOverlayLayout === layout) {
+        teamsContainer.querySelectorAll(".team-card[data-team-key]").forEach((card) => {
+            const previousRect = previousCardRects.get(card.dataset.teamKey);
+            if (!previousRect) return;
+            const nextRect = card.getBoundingClientRect();
+            const deltaX = previousRect.left - nextRect.left;
+            const deltaY = previousRect.top - nextRect.top;
+            if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) return;
+            card.style.transition = "none";
+            card.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+            cardsToAnimate.push(card);
+        });
+    }
     previousRenderedTeamKeys = nextRenderedTeamKeys;
     hasRenderedOverlayTeams = true;
+    previousOverlayLayout = layout;
+    if (cardsToAnimate.length) {
+        requestAnimationFrame(() => {
+            cardsToAnimate.forEach((card) => {
+                card.classList.add("team-card-moving");
+                card.style.removeProperty("transition");
+                card.style.transform = "translate(0, 0)";
+                const cleanup = () => {
+                    card.classList.remove("team-card-moving");
+                    card.style.removeProperty("transform");
+                    card.removeEventListener("transitionend", cleanup);
+                };
+                card.addEventListener("transitionend", cleanup);
+            });
+        });
+    }
     if (layout === "all") {
-        requestAnimationFrame(() => applyAllTeamsScroll(allViewScroll));
+        scheduleAllTeamsScrollApply(allViewScroll);
     } else {
         teamsContainer.scrollTop = 0;
     }
@@ -914,6 +956,9 @@ transport.subscribe((data) => {
             lastAppliedSeekToken = incomingSeekToken;
         }
         renderScreenMode();
+        if (presentationState.live && teamsContainer?.dataset.layout === "all") {
+            scheduleAllTeamsScrollApply(presentationState.allViewScroll);
+        }
         return;
     }
 
@@ -1010,3 +1055,12 @@ if (initialState) {
 renderScreenMode();
 resizeFireworksCanvas();
 window.addEventListener("resize", resizeFireworksCanvas);
+
+if (teamsContainer && "ResizeObserver" in window) {
+    allScrollResizeObserver = new ResizeObserver(() => {
+        if (teamsContainer.dataset.layout === "all") {
+            syncAllTeamsScrollToRatio();
+        }
+    });
+    allScrollResizeObserver.observe(teamsContainer);
+}

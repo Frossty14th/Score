@@ -148,8 +148,6 @@ const transport = createTransport("control");
 const STORAGE_KEY = "scoreboard_state_v1";
 const ADVERTISEMENT_FOLDER_URL = "../Advertisement/";
 const ADVERTISEMENT_MANIFEST_URL = "../Advertisement/advertisement-manifest.json";
-const ADVERT_ASSETS_FOLDER_URL = "../assets/Advert/";
-const ADVERT_ASSETS_MANIFEST_URL = "../assets/Advert/advert-manifest.json";
 
 const DEFAULT_TEAMS = [
     { name: "Team A", score: 0, logo: "", logoWidth: 150, logoHeight: null, teamColor: "" },
@@ -214,6 +212,8 @@ let liveMode = false;
 let holdMode = false;
 let viewMode = "all";
 let allViewScroll = 0;
+let allViewScrollPending = null;
+let allViewScrollRaf = null;
 let standbyMode = true;
 let standbyMediaSrc = "";
 let standbyMediaType = "";
@@ -485,6 +485,7 @@ function restoreHistorySnapshot(snapshot) {
     syncButtonStates();
     renderStandbyLibrarySelect();
     syncFallbackControlsFromState();
+    updateSponsorPreviews();
     updateAdStatus();
     syncAdStartIndexInput();
     renderAdPreview();
@@ -831,6 +832,44 @@ function closeHotkeySettings() {
     modal.style.display = "none";
 }
 
+function openSponsorSettings() {
+    closeTopMenu();
+    const modal = document.getElementById("sponsor-modal");
+    if (!modal) return;
+    updateSponsorPreviews();
+    modal.style.display = "flex";
+}
+
+function openOverlayWindow() {
+    closeTopMenu();
+    const overlayUrl = "../overlay/overlay.html";
+    const win = window.open(overlayUrl, "scoreboard-overlay");
+    if (!win) {
+        showToast("Popup blocked. Allow popups to launch overlay.", "warn");
+    }
+}
+
+function closeSponsorSettings() {
+    const modal = document.getElementById("sponsor-modal");
+    if (!modal) return;
+    modal.style.display = "none";
+}
+
+function updateSponsorPreviews() {
+    ["1", "2", "3", "4"].forEach((slot) => {
+        const img = document.getElementById(`sponsor-preview-${slot}`);
+        if (!img) return;
+        const src = sponsorLogos[slot];
+        if (src) {
+            img.src = src;
+            img.style.display = "block";
+        } else {
+            img.removeAttribute("src");
+            img.style.display = "none";
+        }
+    });
+}
+
 function openAddTeamModal() {
     const modal = document.getElementById("add-team-modal");
     if (!modal) return;
@@ -1014,6 +1053,10 @@ function initTopMenu() {
         if (hotkeyBackdrop && target.id === "hotkey-modal") {
             closeHotkeySettings();
         }
+        const sponsorBackdrop = target.closest("#sponsor-modal");
+        if (sponsorBackdrop && target.id === "sponsor-modal") {
+            closeSponsorSettings();
+        }
         const addTeamBackdrop = target.closest("#add-team-modal");
         if (addTeamBackdrop && target.id === "add-team-modal") {
             closeAddTeamModal();
@@ -1025,6 +1068,7 @@ function initTopMenu() {
             closeTopMenu();
             closeOperatorLog();
             closeHotkeySettings();
+            closeSponsorSettings();
             closeAddTeamModal();
         }
     });
@@ -1060,6 +1104,10 @@ function syncEventHeaderControls() {
     const titleInput = document.getElementById("event-title-input");
     if (titleInput) {
         titleInput.value = eventTitle || "";
+    }
+    const roundInput = document.getElementById("round-name-input");
+    if (roundInput) {
+        roundInput.value = roundName || "";
     }
 }
 
@@ -1097,6 +1145,18 @@ function setAllTeamsScroll(rawValue) {
     saveState();
     broadcastControlState();
     if (liveMode) broadcastUpdate();
+}
+
+function queueAllTeamsScroll(rawValue) {
+    const safe = Math.max(0, Math.min(1000, Math.floor(Number(rawValue) || 0)));
+    allViewScrollPending = safe;
+    if (allViewScrollRaf) return;
+    allViewScrollRaf = requestAnimationFrame(() => {
+        allViewScrollRaf = null;
+        if (allViewScrollPending === null) return;
+        setAllTeamsScroll(allViewScrollPending);
+        allViewScrollPending = null;
+    });
 }
 
 function resetAllTeamsScroll() {
@@ -1824,12 +1884,13 @@ function renderStandbyLibrarySelect() {
         select.appendChild(option);
     });
 
-    if (previousValue && Number(previousValue) < standbyLibrary.length) {
+    if (previousValue !== "" && Number(previousValue) < standbyLibrary.length) {
         select.value = previousValue;
     } else {
         select.value = "0";
     }
     updateAdStatus();
+    updateNextAdPreview();
 }
 
 function updateAdStatus() {
@@ -1863,7 +1924,7 @@ function getActiveAdName() {
 
 function getSelectedLibraryItem() {
     const select = getMediaLibrarySelect();
-    if (!select || !select.value) return null;
+    if (!select || select.value === "") return null;
     const index = Number(select.value);
     if (!Number.isFinite(index)) return null;
     return standbyLibrary[index] || null;
@@ -1888,6 +1949,7 @@ function renderAdPreview() {
     const activeSrc = useSelected ? selectedItem.path : (usePending ? pendingAdMediaSrc : standbyMediaSrc);
     if (!activeSrc) {
         previewName.textContent = "No media selected";
+        updateNextAdPreview();
         return;
     }
 
@@ -1912,6 +1974,7 @@ function renderAdPreview() {
         previewImage.src = activeSrc;
         previewImage.style.display = "block";
     }
+    updateNextAdPreview();
 }
 
 function formatMediaTime(seconds) {
@@ -2001,6 +2064,59 @@ function initAdPreviewPlayer() {
         previewVideo.currentTime = Math.max(0, Math.min(duration, duration * ratio));
         updateAdPreviewTime();
     });
+}
+
+function initAdLibraryDropzone() {
+    const dropzone = document.getElementById("ad-library-dropzone");
+    const select = document.getElementById("standby-media-select");
+    if (!dropzone) return;
+
+    const prevent = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+    };
+
+    const setActive = (active) => {
+        dropzone.classList.toggle("is-dragover", active);
+    };
+
+    const handleDrop = async (event) => {
+        prevent(event);
+        setActive(false);
+        await addStandbyLibraryFromFiles(event.dataTransfer?.files);
+    };
+
+    ["dragenter", "dragover"].forEach((evt) => {
+        dropzone.addEventListener(evt, (event) => {
+            prevent(event);
+            setActive(true);
+        });
+    });
+
+    ["dragleave", "dragend"].forEach((evt) => {
+        dropzone.addEventListener(evt, (event) => {
+            prevent(event);
+            setActive(false);
+        });
+    });
+
+    dropzone.addEventListener("drop", handleDrop);
+
+    if (select) {
+        ["dragenter", "dragover"].forEach((evt) => {
+            select.addEventListener(evt, (event) => {
+                prevent(event);
+                setActive(true);
+            });
+        });
+        ["dragleave", "dragend"].forEach((evt) => {
+            select.addEventListener(evt, (event) => {
+                prevent(event);
+                setActive(false);
+            });
+        });
+        select.addEventListener("drop", handleDrop);
+    }
 }
 
 function syncFallbackControlsFromState() {
@@ -2184,47 +2300,54 @@ function applyStandbyLibraryAsPlaylist() {
     renderAdPreview();
 }
 
+async function addStandbyLibraryFromFiles(fileList) {
+    if (controlLockMode) {
+        showToast("Controls are locked", "warn");
+        return;
+    }
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+
+    const mediaFiles = files.filter((file) => {
+        if (file.type.startsWith("image/") || file.type.startsWith("video/")) return true;
+        return isMediaPath(file.name);
+    });
+    if (!mediaFiles.length) {
+        alert("Only image or video files are supported.");
+        return;
+    }
+
+    const loadedItems = [];
+    for (const file of mediaFiles) {
+        try {
+            const dataUrl = await readFileAsDataUrl(file);
+            const type = detectMediaTypeFromFile(file);
+            loadedItems.push({
+                name: file.name || "Uploaded media",
+                path: dataUrl,
+                type
+            });
+        } catch (error) {
+            console.warn(error);
+        }
+    }
+
+    if (loadedItems.length) {
+        standbyLibrary = standbyLibrary.concat(loadedItems);
+        renderStandbyLibrarySelect();
+        saveState();
+        renderAdPreview();
+        showToast(`Added ${loadedItems.length} media file(s)`, "ok");
+    } else {
+        alert("Files were selected, but none could be loaded.");
+    }
+}
+
 async function uploadStandbyLibrary() {
     const fileInput = document.getElementById("standby-library-upload");
     if (!fileInput) return;
     fileInput.onchange = async (event) => {
-        const files = Array.from(event.target.files || []);
-        if (!files.length) return;
-
-        const mediaFiles = files.filter((file) => {
-            if (file.type.startsWith("image/") || file.type.startsWith("video/")) return true;
-            return isMediaPath(file.name);
-        });
-        if (!mediaFiles.length) {
-            alert("Only image or video files are supported.");
-            fileInput.value = "";
-            return;
-        }
-
-        const loadedItems = [];
-        for (const file of mediaFiles) {
-            try {
-                const dataUrl = await readFileAsDataUrl(file);
-                const type = detectMediaTypeFromFile(file);
-                loadedItems.push({
-                    name: file.name || "Uploaded media",
-                    path: dataUrl,
-                    type
-                });
-            } catch (error) {
-                console.warn(error);
-            }
-        }
-
-        if (loadedItems.length) {
-            standbyLibrary = standbyLibrary.concat(loadedItems);
-            renderStandbyLibrarySelect();
-            saveState();
-            renderAdPreview();
-            showToast(`Added ${loadedItems.length} media file(s)`, "ok");
-        } else {
-            alert("Files were selected, but none could be loaded.");
-        }
+        await addStandbyLibraryFromFiles(event.target.files);
         fileInput.value = "";
     };
     fileInput.click();
@@ -2232,7 +2355,7 @@ async function uploadStandbyLibrary() {
 
 function removeSelectedStandbyMedia() {
     const select = getMediaLibrarySelect();
-    if (!select || !select.value) {
+    if (!select || select.value === "") {
         alert("Select a media item first.");
         return;
     }
@@ -2249,6 +2372,7 @@ function removeSelectedStandbyMedia() {
     saveState();
     updateAdStatus();
     renderAdPreview();
+    syncAdStartIndexInput();
 }
 
 function clearAdLibrary() {
@@ -2262,6 +2386,7 @@ function clearAdLibrary() {
     saveState();
     updateAdStatus();
     renderAdPreview();
+    syncAdStartIndexInput();
     addOperatorLog("Ad Library Cleared", "");
 }
 
@@ -2299,6 +2424,7 @@ async function handleAdvertisementFolderSelection(fileList) {
     renderStandbyLibrarySelect();
     saveState();
     renderAdPreview();
+    syncAdStartIndexInput();
 
     if (loadedItems.length === 0) {
         alert("Files were selected, but none could be loaded.");
@@ -2355,68 +2481,9 @@ async function loadStandbyLibrary() {
     }
 }
 
-async function loadAdvertAssetsLibrary() {
-    try {
-        const original = standbyLibrary;
-        standbyLibrary = [];
-
-        try {
-            const directoryResponse = await fetch(ADVERT_ASSETS_FOLDER_URL, { cache: "no-store" });
-            if (directoryResponse.ok) {
-                const html = await directoryResponse.text();
-                const parsed = parseDirectoryListingHtml(html);
-                standbyLibrary = parsed.map((item, index) =>
-                    normalizeManifestItem(
-                        {
-                            name: item.name,
-                            path: `${ADVERT_ASSETS_FOLDER_URL}${item.name}`,
-                            type: item.type
-                        },
-                        index
-                    )
-                ).filter(Boolean);
-            }
-        } catch (_error) {
-            standbyLibrary = [];
-        }
-
-        if (standbyLibrary.length === 0) {
-            const manifestResponse = await fetch(ADVERT_ASSETS_MANIFEST_URL, { cache: "no-store" });
-            if (!manifestResponse.ok) {
-                throw new Error(`Manifest request failed (${manifestResponse.status})`);
-            }
-
-            const manifest = await manifestResponse.json();
-            const items = Array.isArray(manifest) ? manifest : manifest.items;
-            if (!Array.isArray(items)) {
-                throw new Error("Manifest must be an array or an object with an 'items' array.");
-            }
-
-            standbyLibrary = items
-                .map((item, index) => normalizeManifestItem(item, index))
-                .filter(Boolean);
-        }
-
-        if (standbyLibrary.length === 0) {
-            standbyLibrary = original;
-            alert("No valid image/video files found in assets/Advert.");
-            return;
-        }
-
-        renderStandbyLibrarySelect();
-        saveState();
-        updateAdStatus();
-        renderAdPreview();
-        showToast("Loaded ads from assets/Advert", "ok");
-    } catch (error) {
-        console.warn("Failed to load assets/Advert library:", error);
-        alert("Could not load assets/Advert. If folder listing is blocked, create assets/Advert/advert-manifest.json.");
-    }
-}
-
 function useSelectedStandbyMedia() {
     const select = getMediaLibrarySelect();
-    if (!select || !select.value) {
+    if (!select || select.value === "") {
         alert("Select a media item first.");
         return;
     }
@@ -2447,6 +2514,7 @@ function useSelectedStandbyMedia() {
     updateAdStatus();
     renderAdPreview();
     syncAdStartIndexInput();
+    updateNextAdPreview();
 }
 
 function changeViewMode(mode) {
@@ -2586,6 +2654,7 @@ function goToPreviousAd() {
     broadcastControlState();
     updateAdStatus();
     syncAdStartIndexInput();
+    updateNextAdPreview();
 }
 
 function goToNextAd() {
@@ -2600,6 +2669,7 @@ function goToNextAd() {
     broadcastControlState();
     updateAdStatus();
     syncAdStartIndexInput();
+    updateNextAdPreview();
 }
 
 function toggleAdHold() {
@@ -2609,6 +2679,7 @@ function toggleAdHold() {
     broadcastControlState();
     updateAdStatus();
     syncAdStartIndexInput();
+    updateNextAdPreview();
 }
 
 function showPreviewOnOverlay() {
@@ -2631,6 +2702,8 @@ function showPreviewOnOverlay() {
     saveState();
     broadcastControlState();
     updateAdStatus();
+    syncAdStartIndexInput();
+    updateNextAdPreview();
     addOperatorLog("Ad Published", pendingAdMediaName || "Uploaded media");
     showToast("Ad pushed to overlay", "ok");
 }
@@ -2654,6 +2727,7 @@ function publishSelectedAdToOverlay() {
         updateAdStatus();
         syncAdStartIndexInput();
         renderAdPreview();
+        updateNextAdPreview();
         addOperatorLog("Ad Published", selectedItem.name || "Selected media");
         showToast("Ad pushed to overlay", "ok");
         return;
@@ -2686,6 +2760,7 @@ function startSlideshowAtIndex() {
     broadcastControlState();
     updateAdStatus();
     syncAdStartIndexInput();
+    updateNextAdPreview();
 }
 
 function applyFallbackSettings() {
@@ -2732,6 +2807,26 @@ function applyEventTitle() {
     showToast("Event title updated", "info");
 }
 
+function applyRoundName() {
+    const input = document.getElementById("round-name-input");
+    if (!input) return;
+    const nextRound = String(input.value || "").trim();
+    if (!nextRound) {
+        showToast("Round name cannot be empty", "warn");
+        input.value = roundName;
+        return;
+    }
+    if (nextRound === roundName) return;
+    recordHistory();
+    roundName = nextRound;
+    syncEventHeaderControls();
+    saveState();
+    broadcastControlState();
+    if (liveMode) broadcastUpdate();
+    addOperatorLog("Round Renamed", roundName);
+    showToast(`Round updated: ${roundName}`, "info");
+}
+
 function uploadSponsorLogo(slot) {
     const safeSlot = ["1", "2", "3", "4"].includes(String(slot)) ? String(slot) : "1";
     const input = document.getElementById(`sponsor-${safeSlot}-upload`);
@@ -2756,6 +2851,7 @@ function uploadSponsorLogo(slot) {
             const slotLabel = getSponsorSlotLabel(safeSlot);
             addOperatorLog("Sponsor Logo Updated", slotLabel);
             showToast(`Sponsor logo ${slotLabel} updated`, "ok");
+            updateSponsorPreviews();
         };
         reader.readAsDataURL(file);
         input.value = "";
@@ -2774,6 +2870,7 @@ function clearSponsorLogo(slot) {
     const slotLabel = getSponsorSlotLabel(safeSlot);
     addOperatorLog("Sponsor Logo Cleared", slotLabel);
     showToast(`Sponsor logo ${slotLabel} cleared`, "warn");
+    updateSponsorPreviews();
 }
 
 function uploadFallbackDvdImage() {
@@ -3208,6 +3305,7 @@ function applyTimerAdjust(direction) {
 
 function uploadStandbyMedia() {
     const fileInput = document.getElementById("standby-upload");
+    if (!fileInput) return;
     fileInput.onchange = (event) => {
         const file = event.target.files[0];
         if (!file) return;
@@ -3299,6 +3397,7 @@ updateAdStatus();
 syncAdStartIndexInput();
 renderAdPreview();
 initAdPreviewPlayer();
+initAdLibraryDropzone();
 renderSfxButtonsState();
 renderOperatorLogTable();
 const advertisementFolderInput = document.getElementById("advertisement-folder-input");
@@ -3329,6 +3428,15 @@ if (eventTitleInput) {
         }
     });
 }
+const roundNameInput = document.getElementById("round-name-input");
+if (roundNameInput) {
+    roundNameInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            applyRoundName();
+        }
+    });
+}
 const sfxNameInput = document.getElementById("sfx-name-input");
 if (sfxNameInput) {
     sfxNameInput.addEventListener("keydown", (event) => {
@@ -3341,7 +3449,7 @@ if (sfxNameInput) {
 const allScrollRange = document.getElementById("all-scroll-range");
 if (allScrollRange) {
     allScrollRange.addEventListener("input", (event) => {
-        setAllTeamsScroll(event.target.value);
+        queueAllTeamsScroll(event.target.value);
     });
 }
 transport.subscribe((data) => {

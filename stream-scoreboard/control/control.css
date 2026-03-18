@@ -514,6 +514,24 @@ input[type="number"] {
     background: rgba(255, 255, 255, 0.02);
 }
 
+.ad-dropzone {
+    margin-top: 6px;
+    padding: 10px;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+    background: rgba(255, 255, 255, 0.02);
+    transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+}
+
+.ad-dropzone.is-dragover {
+    border-color: #52b6ff;
+    background: rgba(82, 182, 255, 0.12);
+    color: var(--text);
+}
+
 #standby-media-select {
     width: 100%;
     min-height: 140px;
@@ -534,6 +552,33 @@ input[type="number"] {
 
 .ad-library-actions button {
     flex: 1 1 160px;
+}
+
+.ad-sequence-row label {
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 700;
+}
+
+#ad-next-image,
+#ad-next-video {
+    width: 100%;
+    max-height: 140px;
+    min-height: 100px;
+    object-fit: contain;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    display: none;
+    background: #111;
+}
+
+#ad-next-name {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 #timer {
@@ -643,6 +688,22 @@ input[type="number"] {
 .event-title-row {
     margin-top: 6px;
     margin-bottom: 6px;
+    flex-wrap: wrap;
+}
+
+.sponsor-modal-card {
+    max-width: 520px;
+}
+
+.sponsor-preview {
+    width: 100%;
+    max-height: 90px;
+    object-fit: contain;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 6px 0;
+    display: none;
 }
 
 .sfx-strip {

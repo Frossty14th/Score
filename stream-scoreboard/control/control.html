@@ -11,8 +11,10 @@
     <div class="topbar-tools">
         <button id="menu-btn" data-lock-exempt onclick="toggleTopMenu()" title="Open quick tools menu">Menu</button>
         <div id="top-menu" class="top-menu">
+            <button class="menu-item" data-lock-exempt onclick="openOverlayWindow()">Launch Overlay</button>
             <button class="menu-item" data-lock-exempt onclick="openOperatorLog()">Operator Activity Log</button>
             <button class="menu-item" data-lock-exempt onclick="openHotkeySettings()">Hotkey Settings</button>
+            <button class="menu-item" data-lock-exempt onclick="openSponsorSettings()">Sponsor Logos</button>
             <button class="menu-item danger" data-lock-exempt onclick="resetMatch()">Reset Match</button>
         </div>
     </div>
@@ -28,7 +30,6 @@
             <button id="live-btn" onclick="toggleLive()" title="Toggle live scoreboard visibility">Live: OFF</button>
             <button id="hold-btn" onclick="toggleHold()" title="Show/Hide hold overlay">Hold: OFF</button>
             <button id="standby-btn" onclick="toggleStandby()" title="Switch to standby mode">Standby: ON</button>
-            <button onclick="editRoundName()" title="Rename current round">Edit Round</button>
             <button id="undo-btn" onclick="undoAction()" title="Undo last change (Ctrl+Z)">Undo</button>
             <button id="redo-btn" onclick="redoAction()" title="Redo last undone change (Ctrl+Y)">Redo</button>
             <span id="history-meta">History: 0 undo / 0 redo</span>
@@ -61,28 +62,10 @@
             <label for="event-title-input">Event Title</label>
             <input type="text" id="event-title-input" placeholder="Type event title..." style="width:260px;">
             <button onclick="applyEventTitle()">Apply Title</button>
-        </div>
-        <div class="sponsor-slot-grid">
-            <div class="sponsor-slot">
-                <span>Logo Left 1</span>
-                <button onclick="uploadSponsorLogo('1')">Upload</button>
-                <button onclick="clearSponsorLogo('1')">Clear</button>
-            </div>
-            <div class="sponsor-slot">
-                <span>Logo Left 2</span>
-                <button onclick="uploadSponsorLogo('2')">Upload</button>
-                <button onclick="clearSponsorLogo('2')">Clear</button>
-            </div>
-            <div class="sponsor-slot">
-                <span>Logo Right 1</span>
-                <button onclick="uploadSponsorLogo('3')">Upload</button>
-                <button onclick="clearSponsorLogo('3')">Clear</button>
-            </div>
-            <div class="sponsor-slot">
-                <span>Logo Right 2</span>
-                <button onclick="uploadSponsorLogo('4')">Upload</button>
-                <button onclick="clearSponsorLogo('4')">Clear</button>
-            </div>
+            <label for="round-name-input">Round</label>
+            <input type="text" id="round-name-input" placeholder="Round name" style="width:160px;">
+            <button onclick="applyRoundName()">Apply Round</button>
+            <button data-lock-exempt onclick="openSponsorSettings()">Sponsors</button>
         </div>
     </section>
 </div>
@@ -192,12 +175,25 @@
             <div class="ad-library">
                 <div class="ad-preview-title">Ad Library</div>
                 <select id="standby-media-select" size="6"></select>
+                <div class="panel-row ad-sequence-row">
+                    <label for="ad-start-index">Start At</label>
+                    <input type="number" id="ad-start-index" min="1" value="1" style="width:80px;">
+                    <button onclick="startSlideshowAtIndex()">Apply Start</button>
+                </div>
+                <div class="ad-dropzone" id="ad-library-dropzone">
+                    Drop image/video files here to add to the library
+                </div>
                 <div class="panel-row ad-library-actions">
                     <button onclick="uploadStandbyLibrary()">Add Media</button>
-                    <button onclick="loadAdvertAssetsLibrary()">Load From Assets</button>
                     <button onclick="publishSelectedAdToOverlay()">Show Selected</button>
                     <button onclick="removeSelectedStandbyMedia()">Remove Selected</button>
                     <button onclick="clearAdLibrary()">Clear List</button>
+                </div>
+                <div class="ad-preview">
+                    <div class="ad-preview-title">Next Ad</div>
+                    <img id="ad-next-image" alt="Next ad preview image" />
+                    <video id="ad-next-video" muted loop playsinline></video>
+                    <div id="ad-next-name">No next ad</div>
                 </div>
             </div>
             <div class="panel-row">
@@ -236,6 +232,7 @@
 
 <!-- Hidden file input for logos -->
 <input type="file" id="logo-upload" accept="image/*" style="display:none;">
+<input type="file" id="standby-upload" accept="image/*,video/*" style="display:none;">
 <input type="file" id="standby-library-upload" accept="image/*,video/*" multiple style="display:none;">
 <input type="file" id="advertisement-folder-input" accept="image/*,video/*" webkitdirectory directory multiple style="display:none;">
 <input type="file" id="fallback-dvd-upload" accept="image/*" style="display:none;">
@@ -309,6 +306,45 @@
             </div>
             <div id="hotkey-hint">Press Record, then press your shortcut.</div>
             <div id="hotkey-list"></div>
+        </div>
+    </div>
+</div>
+
+<div id="sponsor-modal" class="modal-backdrop" style="display:none;">
+    <div class="modal-card sponsor-modal-card">
+        <div class="modal-head">
+            <h3>Sponsor Logos</h3>
+            <div class="modal-actions">
+                <button data-lock-exempt onclick="closeSponsorSettings()">Close</button>
+            </div>
+        </div>
+        <div class="modal-body">
+            <div class="sponsor-slot-grid">
+                <div class="sponsor-slot">
+                    <span>Logo Left 1</span>
+                    <img id="sponsor-preview-1" class="sponsor-preview" alt="Sponsor logo preview 1" />
+                    <button onclick="uploadSponsorLogo('1')">Upload</button>
+                    <button onclick="clearSponsorLogo('1')">Clear</button>
+                </div>
+                <div class="sponsor-slot">
+                    <span>Logo Left 2</span>
+                    <img id="sponsor-preview-2" class="sponsor-preview" alt="Sponsor logo preview 2" />
+                    <button onclick="uploadSponsorLogo('2')">Upload</button>
+                    <button onclick="clearSponsorLogo('2')">Clear</button>
+                </div>
+                <div class="sponsor-slot">
+                    <span>Logo Right 1</span>
+                    <img id="sponsor-preview-3" class="sponsor-preview" alt="Sponsor logo preview 3" />
+                    <button onclick="uploadSponsorLogo('3')">Upload</button>
+                    <button onclick="clearSponsorLogo('3')">Clear</button>
+                </div>
+                <div class="sponsor-slot">
+                    <span>Logo Right 2</span>
+                    <img id="sponsor-preview-4" class="sponsor-preview" alt="Sponsor logo preview 4" />
+                    <button onclick="uploadSponsorLogo('4')">Upload</button>
+                    <button onclick="clearSponsorLogo('4')">Clear</button>
+                </div>
+            </div>
         </div>
     </div>
 </div>
